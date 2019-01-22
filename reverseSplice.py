@@ -3,6 +3,8 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import csv
 
+#added comment
+
 # cis:  generate all split pairs possible to create a peptide, and
 #       then search through all proteins in second file to see if
 #       any proteins contain both splits.
