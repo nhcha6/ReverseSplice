@@ -100,6 +100,10 @@ def findCisIndexes(cisSplits, protSeq):
             splitLoc2.append([i for i in range(x.start(), x.end())])
         if splitLoc1 == [] or splitLoc2 == []:
             continue
+        if len(split1) == 1:
+            splitLoc1 = split1
+        if len(split2) == 1:
+            splitLoc2 = split2
         splitLocations.append(splitLoc1)
         splitLocations.append(splitLoc2)
         totalLocations.append(splitLocations)
