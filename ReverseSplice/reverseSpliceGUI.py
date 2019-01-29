@@ -112,7 +112,10 @@ class Example(QWidget):
             QMessageBox.about(self, 'Message', 'Please Upload a Fasta File before generating output!')
         else:
 
-            reply = QMessageBox.question(self, 'Message', 'Do you wish to proceed with the following input?')
+            reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
+                                                            "Please ensure you haven't switched the protein and peptide input." + '\n'+ '\n' +
+                                                            'Protein File: ' + self.proteinFile + '\n' + '\n' +
+                                                            'Peptide File: ' + self.peptideFile)
             if reply == QMessageBox.Yes:
                 start = time()
                 outputPath = self.getOutputPath()
@@ -122,7 +125,7 @@ class Example(QWidget):
                     self.outputGen.signals.finished.connect(self.outputFinished)
                     self.threadpool.start(self.outputGen)
                     self.outputLabel = QLabel("Generating Output. Please Wait!")
-                    self.grid.addWidget(self.outputLabel,3,1)
+                    self.grid.addWidget(self.outputLabel,4,1)
                     #generateOutputNew(outputPath, self.minPeptideLen, self.inputFile)
 
     def createOutput(self, outputPath, proteinFile, peptideFile):
