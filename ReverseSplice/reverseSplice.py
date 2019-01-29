@@ -5,6 +5,9 @@ import csv
 from datetime import datetime
 import re
 
+# Define maxLen
+maxLen = 20
+
 # takes a fasta file path (containing all the proteins which could serve as an origin location) and returns
 # a dictionary which contains a protein sequence as the key, and the protein name as the value.
 def protFastaToDict(protFile):
@@ -55,6 +58,9 @@ def findLinOrigins(protDict, pepList):
     linOriginDict = {}
     # iterate through each peptide
     for pep in pepList:
+        # check pep is within maxLen
+        if len(pep) > maxLen:
+            continue
         # initialise the key as an empty list in the outputDict
         linOriginDict[pep] = []
         # iterate through each protSeq in the keys of protDict
@@ -83,6 +89,8 @@ def findCisOrigins(protDict, pepList):
     cisOriginDict = {}
     # iterate through each pep in pepList
     for pep in pepList:
+        if len(pep) > maxLen:
+            continue
         # initialise that key in the dictionary
         cisOriginDict[pep] = []
         # find the splits which could be combined to create the peptide using Cis splicing.
@@ -243,7 +251,9 @@ def cisDataRow(origins):
 
 def generateOutput(outputPath, proteinFile, peptideFile):
     protDict = protFastaToDict(proteinFile)
+    print(protDict)
 
     pepList = pepFastaToList(peptideFile)
+    print(pepList)
 
     print(generateOrigins(protDict, pepList, outputPath, True, True, False))

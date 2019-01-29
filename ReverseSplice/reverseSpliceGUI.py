@@ -60,17 +60,18 @@ class Example(QWidget):
     def initialiseWidgets(self):
         self.importProtein = QPushButton('Import Protein Fasta')
         self.grid.addWidget(self.importProtein, 1, 1)
-        self.importProtein.clicked.connect(self.uploadProtein)
+        self.importProtein.clicked.connect(self.uploadFile)
 
         self.importPeptide = QPushButton('Import Peptide Fasta')
         self.grid.addWidget(self.importPeptide, 2, 1)
-        self.importPeptide.clicked.connect(self.uploadProtein)
+        self.importPeptide.clicked.connect(self.uploadFile)
 
         self.generateOutput = QPushButton('Generate Output')
+        self.generateOutput.setEnabled(False)
         self.grid.addWidget(self.generateOutput, 3,1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
-    def uploadProtein(self):
+    def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
         if fname[0][-5:] == 'fasta':
             if self.sender() == self.importProtein:
@@ -79,6 +80,10 @@ class Example(QWidget):
             else:
                 self.peptideFile = fname[0]
                 QMessageBox.about(self, 'Message', 'Peptide input fasta successfully uploaded!')
+        if self.proteinFile == "" or self.peptideFile == "":
+            self.generateOutput.setEnabled(False)
+        else:
+            self.generateOutput.setEnabled(True)
 
     def getOutputPath(self):
 
@@ -119,8 +124,6 @@ class Example(QWidget):
                     self.outputLabel = QLabel("Generating Output. Please Wait!")
                     self.grid.addWidget(self.outputLabel,3,1)
                     #generateOutputNew(outputPath, self.minPeptideLen, self.inputFile)
-                    end = time()
-                    print(end-start)
 
     def createOutput(self, outputPath, proteinFile, peptideFile):
         generateOutput(outputPath, proteinFile, peptideFile)
