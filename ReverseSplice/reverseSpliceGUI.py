@@ -68,8 +68,21 @@ class Example(QWidget):
 
         self.generateOutput = QPushButton('Generate Output')
         self.generateOutput.setEnabled(False)
-        self.grid.addWidget(self.generateOutput, 3,1)
+        self.grid.addWidget(self.generateOutput, 6, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
+
+        self.linCheckbox = QCheckBox('Linear')
+        self.linCheckbox.setEnabled(False)
+        self.linCheckbox.stateChanged.connect(self.enableOutput)
+        self.cisCheckbox = QCheckBox('Cis')
+        self.cisCheckbox.setEnabled(False)
+        self.cisCheckbox.stateChanged.connect(self.enableOutput)
+        self.transCheckbox = QCheckBox('Trans')
+        self.transCheckbox.setEnabled(False)
+        self.transCheckbox.stateChanged.connect(self.enableOutput)
+        self.grid.addWidget(self.linCheckbox, 3, 1)
+        self.grid.addWidget(self.cisCheckbox, 4, 1)
+        self.grid.addWidget(self.transCheckbox, 5, 1)
 
     def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
@@ -81,9 +94,11 @@ class Example(QWidget):
                 self.peptideFile = fname[0]
                 QMessageBox.about(self, 'Message', 'Peptide input fasta successfully uploaded!')
         if self.proteinFile == "" or self.peptideFile == "":
-            self.generateOutput.setEnabled(False)
+            self.linCheckbox.setEnabled(False)
+            self.cisCheckbox.setEnabled(False)
         else:
-            self.generateOutput.setEnabled(True)
+            self.linCheckbox.setEnabled(True)
+            self.cisCheckbox.setEnabled(True)
 
     def getOutputPath(self):
 
@@ -127,6 +142,12 @@ class Example(QWidget):
                     self.outputLabel = QLabel("Generating Output. Please Wait!")
                     self.grid.addWidget(self.outputLabel,4,1)
                     #generateOutputNew(outputPath, self.minPeptideLen, self.inputFile)
+
+    def enableOutput(self):
+        if self.linCheckbox.isChecked() or self.cisCheckbox.isChecked() or self.transCheckbox.isChecked():
+            self.generateOutput.setEnabled(True)
+        else:
+            self.generateOutput.setEnabled(False)
 
     def createOutput(self, outputPath, proteinFile, peptideFile):
         generateOutput(outputPath, proteinFile, peptideFile)
