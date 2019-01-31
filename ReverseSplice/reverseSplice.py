@@ -32,20 +32,6 @@ def protFastaToDict(protFile):
     return protDict
 
 
-def pepFastaToList(pepFile):
-    """
-    :param pepFile: A Fasta file path filled with peptides which you want to find origin locations for
-    :return pepList: A list of all the peptides in the fasta file
-    """
-
-    pepList = []
-    with open(pepFile, "rU") as handle:
-        for record in SeqIO.parse(handle, 'fasta'):
-            seq = str(record.seq)
-            pepList.append(seq)
-    return pepList
-
-
 def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
     """
     :param protData: A dictionary containing protein sequences as the key with their origin as the value
@@ -61,12 +47,10 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
 
     if linFlag:
         # Find linear origins
-        print("About to do linear")
         findLinOrigins(protDict, pepFile, outputPath)
     if cisFlag:
         # Find cis origins
-        cisOriginDict = findCisOrigins(protDict, pepFile, outputPath)
-        writeToFasta(cisOriginDict, outputPath, 'Cis')
+        findCisOrigins(protDict, pepFile, outputPath)
     if transFlag:
         # Find trans origins > work in progress
         print('Trans')
@@ -81,14 +65,14 @@ def findLinOrigins(protDict, pepFile, outputPath):
                             from in the relevant origin protein.
     :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
     """
-    print("About to start process")
     numWorkers = multiprocessing.cpu_count()
     toWriteQueue = multiprocessing.Queue()
+    outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
-    pool = multiprocessing.Pool(processes=numWorkers, initializer=processInitArgs,
+    pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
                                 initargs=(toWriteQueue,))
 
-    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath))
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Linear'))
     writerProcess.start()
 
     # iterate through each peptide
@@ -102,6 +86,7 @@ def findLinOrigins(protDict, pepFile, outputPath):
     logging.info("Pool joined")
     toWriteQueue.put(STOP)
     writerProcess.join()
+
 
 def linearOrigin(pep, protDict):
 
@@ -125,13 +110,13 @@ def linearOrigin(pep, protDict):
         if locations:
             linOriginDict[pep].append((protDict[protSeq], locations))
         # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
-    if linOriginDict[pep]:
-        linearOrigin.toWriteQueue.put(linOriginDict)
+
+    linearOrigin.toWriteQueue.put(linOriginDict)
     logging.info('Process complete for: ' + str(pep))
 
-def linearWriter(toWriteQueue, outputPath):
+
+def linearWriter(toWriteQueue, outputPath, spliceType):
     finalLinOriginDict = {}
-    outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
     while True:
         linOriginDict = toWriteQueue.get()
@@ -144,10 +129,10 @@ def linearWriter(toWriteQueue, outputPath):
                 finalLinOriginDict[key].append(linOriginDict[key])
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
-    writeToFasta(finalLinOriginDict, outputPath, 'Linear')
+    writeToFasta(finalLinOriginDict, outputPath, spliceType)
 
 
-def processInitArgs(toWriteQueue):
+def processLinInitArgs(toWriteQueue):
     """
     Designed to initialise arguments for main process
     """
@@ -158,33 +143,65 @@ def processInitArgs(toWriteQueue):
 # as with findLinOrigins(), this takes the protDict and pepList and outputs a dictionary with the peptides as
 # keys and a list of tuples containing origin peptide names and the splitsLocation data as the value.
 # Data structure summary: cisOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
-def findCisOrigins(protDict, pepList):
+def findCisOrigins(protDict, pepFile, outputPath):
+    """
+    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
+    :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
+    :return:
+    """
     cisOriginDict = {}
+    outputPath = outputPath + '_' + 'Cis' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+
+    numWorkers = multiprocessing.cpu_count()
+    toWriteQueue = multiprocessing.Queue()
+    pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
+                                initargs=(toWriteQueue,))
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Cis'))
+    writerProcess.start()
+
     # iterate through each pep in pepList
-    for pep in pepList:
-        if len(pep) > maxLen:
+    with open(pepFile, "rU") as handle:
+        for record in SeqIO.parse(handle, 'fasta'):
+            pep = str(record.seq)
+            logging.info('Cis Process started for: ' + str(pep))
+
+            pool.apply_async(cisOrigin, args=(pep, protDict))
+        pool.close()
+        pool.join()
+    logging.info("Pool joined")
+    toWriteQueue.put(STOP)
+    writerProcess.join()
+
+def cisOrigin(pep, protDict):
+
+    cisOriginDict = {}
+
+    # initialise that key in the dictionary
+    cisOriginDict[pep] = []
+    # find the splits which could be combined to create the peptide using Cis splicing.
+    # cisSplits is a list of tups, where each tuple contains two complimentary splits.
+    # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
+    cisSplits = findCisSplits(pep)
+    # iterate through each protein in protDict.keys()
+    for protSeq in protDict.keys():
+        # ignore that protSeq if the linear splice comes from it already.
+        if pep in protSeq:
             continue
-        # initialise that key in the dictionary
-        cisOriginDict[pep] = []
-        # find the splits which could be combined to create the peptide using Cis splicing.
-        # cisSplits is a list of tups, where each tuple contains two complimentary splits.
-        # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
-        cisSplits = findCisSplits(pep)
-        # iterate through each protein in protDict.keys()
-        for protSeq in protDict.keys():
-            # ignore that protSeq if the linear splice comes from it already.
-            if pep in protSeq:
-                continue
-            # find the location data corresponding the current protSeq.
-            locations = findCisIndexes(cisSplits, protSeq)
-            # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
-            # If so, continue.
-            if locations == []:
-                continue
-            # if it is possible to create the peptide using cis splicing from the current protein, add the protName
-            # and locations tuple to cisOriginsDict
-            cisOriginDict[pep].append((protDict[protSeq], locations))
-    return cisOriginDict
+        # find the location data corresponding the current protSeq.
+        locations = findCisIndexes(cisSplits, protSeq)
+        # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
+        # If so, continue.
+        if locations == []:
+            continue
+        # if it is possible to create the peptide using cis splicing from the current protein, add the protName
+        # and locations tuple to cisOriginsDict
+        cisOriginDict[pep].append((protDict[protSeq], locations))
+    cisOrigin.toWriteQueue.put(cisOriginDict)
+    logging.info('Cis Process complete for: ' + str(pep))
+
+
+def processCisInitArgs(toWriteQueue):
+    cisOrigin.toWriteQueue = toWriteQueue
 
 # takes a peptide and returns a list of tuples, where each tuple is a possible pair of subsequences which
 # could be combined to make the peptide.
@@ -331,6 +348,4 @@ def cisDataRow(origins):
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
     protDict = protFastaToDict(proteinFile)
-    print("BEGIN")
-
     generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag)
