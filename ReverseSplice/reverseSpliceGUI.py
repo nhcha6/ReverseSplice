@@ -60,17 +60,31 @@ class Example(QWidget):
     def initialiseWidgets(self):
         self.importProtein = QPushButton('Import Protein Fasta')
         self.grid.addWidget(self.importProtein, 1, 1)
-        self.importProtein.clicked.connect(self.uploadProtein)
+        self.importProtein.clicked.connect(self.uploadFile)
 
         self.importPeptide = QPushButton('Import Peptide Fasta')
         self.grid.addWidget(self.importPeptide, 2, 1)
-        self.importPeptide.clicked.connect(self.uploadProtein)
+        self.importPeptide.clicked.connect(self.uploadFile)
 
         self.generateOutput = QPushButton('Generate Output')
-        self.grid.addWidget(self.generateOutput, 3,1)
+        self.generateOutput.setEnabled(False)
+        self.grid.addWidget(self.generateOutput, 6, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
-    def uploadProtein(self):
+        self.linCheckbox = QCheckBox('Linear')
+        self.linCheckbox.setEnabled(False)
+        self.linCheckbox.stateChanged.connect(self.enableOutput)
+        self.cisCheckbox = QCheckBox('Cis')
+        self.cisCheckbox.setEnabled(False)
+        self.cisCheckbox.stateChanged.connect(self.enableOutput)
+        self.transCheckbox = QCheckBox('Trans')
+        self.transCheckbox.setEnabled(False)
+        self.transCheckbox.stateChanged.connect(self.enableOutput)
+        self.grid.addWidget(self.linCheckbox, 3, 1)
+        self.grid.addWidget(self.cisCheckbox, 4, 1)
+        self.grid.addWidget(self.transCheckbox, 5, 1)
+
+    def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
         if fname[0][-5:] == 'fasta':
             if self.sender() == self.importProtein:
@@ -79,6 +93,12 @@ class Example(QWidget):
             else:
                 self.peptideFile = fname[0]
                 QMessageBox.about(self, 'Message', 'Peptide input fasta successfully uploaded!')
+        if self.proteinFile == "" or self.peptideFile == "":
+            self.linCheckbox.setEnabled(False)
+            self.cisCheckbox.setEnabled(False)
+        else:
+            self.linCheckbox.setEnabled(True)
+            self.cisCheckbox.setEnabled(True)
 
     def getOutputPath(self):
 
@@ -107,23 +127,36 @@ class Example(QWidget):
             QMessageBox.about(self, 'Message', 'Please Upload a Fasta File before generating output!')
         else:
 
-            reply = QMessageBox.question(self, 'Message', 'Do you wish to proceed with the following input?')
+            linFlag = self.linCheckbox.isChecked()
+            cisFlag = self.cisCheckbox.isChecked()
+            transFlag = self.transCheckbox.isChecked()
+
+            reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
+                                                            "Please ensure you haven't switched the protein and peptide input." + '\n'+ '\n' +
+                                                            'Protein File: ' + self.proteinFile + '\n' + '\n' +
+                                                            'Peptide File: ' + self.peptideFile + '\n' + '\n' +
+                                                            'Linear: ' + str(linFlag) + ', Cis: ' + str(cisFlag) + ', Trans: ' + str(transFlag))
+
             if reply == QMessageBox.Yes:
                 start = time()
                 outputPath = self.getOutputPath()
                 if outputPath is not False:
 
-                    self.outputGen = OutputGenerator(self.createOutput, outputPath, self.proteinFile, self.peptideFile)
+                    self.outputGen = OutputGenerator(self.createOutput, outputPath, self.proteinFile, self.peptideFile, linFlag, cisFlag,transFlag)
                     self.outputGen.signals.finished.connect(self.outputFinished)
                     self.threadpool.start(self.outputGen)
                     self.outputLabel = QLabel("Generating Output. Please Wait!")
-                    self.grid.addWidget(self.outputLabel,3,1)
+                    self.grid.addWidget(self.outputLabel,7,1)
                     #generateOutputNew(outputPath, self.minPeptideLen, self.inputFile)
-                    end = time()
-                    print(end-start)
 
-    def createOutput(self, outputPath, proteinFile, peptideFile):
-        generateOutput(outputPath, proteinFile, peptideFile)
+    def enableOutput(self):
+        if self.linCheckbox.isChecked() or self.cisCheckbox.isChecked() or self.transCheckbox.isChecked():
+            self.generateOutput.setEnabled(True)
+        else:
+            self.generateOutput.setEnabled(False)
+
+    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
+        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag)
 
     def outputFinished(self):
         QMessageBox.about(self, "Message", "All done!")
