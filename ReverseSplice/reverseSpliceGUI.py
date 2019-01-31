@@ -127,20 +127,26 @@ class Example(QWidget):
             QMessageBox.about(self, 'Message', 'Please Upload a Fasta File before generating output!')
         else:
 
+            linFlag = self.linCheckbox.isChecked()
+            cisFlag = self.cisCheckbox.isChecked()
+            transFlag = self.transCheckbox.isChecked()
+
             reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
                                                             "Please ensure you haven't switched the protein and peptide input." + '\n'+ '\n' +
                                                             'Protein File: ' + self.proteinFile + '\n' + '\n' +
-                                                            'Peptide File: ' + self.peptideFile)
+                                                            'Peptide File: ' + self.peptideFile + '\n' + '\n' +
+                                                            'Linear: ' + str(linFlag) + ', Cis: ' + str(cisFlag) + ', Trans: ' + str(transFlag))
+
             if reply == QMessageBox.Yes:
                 start = time()
                 outputPath = self.getOutputPath()
                 if outputPath is not False:
 
-                    self.outputGen = OutputGenerator(self.createOutput, outputPath, self.proteinFile, self.peptideFile)
+                    self.outputGen = OutputGenerator(self.createOutput, outputPath, self.proteinFile, self.peptideFile, linFlag, cisFlag,transFlag)
                     self.outputGen.signals.finished.connect(self.outputFinished)
                     self.threadpool.start(self.outputGen)
                     self.outputLabel = QLabel("Generating Output. Please Wait!")
-                    self.grid.addWidget(self.outputLabel,4,1)
+                    self.grid.addWidget(self.outputLabel,7,1)
                     #generateOutputNew(outputPath, self.minPeptideLen, self.inputFile)
 
     def enableOutput(self):
@@ -149,8 +155,8 @@ class Example(QWidget):
         else:
             self.generateOutput.setEnabled(False)
 
-    def createOutput(self, outputPath, proteinFile, peptideFile):
-        generateOutput(outputPath, proteinFile, peptideFile)
+    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
+        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag)
 
     def outputFinished(self):
         QMessageBox.about(self, "Message", "All done!")

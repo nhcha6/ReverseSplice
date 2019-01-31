@@ -249,11 +249,9 @@ def cisDataRow(origins):
     return dataRow
 
 
-def generateOutput(outputPath, proteinFile, peptideFile):
+def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
     protDict = protFastaToDict(proteinFile)
-    print(protDict)
 
     pepList = pepFastaToList(peptideFile)
-    print(pepList)
 
-    print(generateOrigins(protDict, pepList, outputPath, True, True, False))
+    generateOrigins(protDict, pepList, outputPath, linFlag, cisFlag, transFlag)
