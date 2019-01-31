@@ -192,17 +192,19 @@ def writeToFasta(originDict, outputPath, spliceType):
             else:
                 # call the data configuration function relevant to the splice type.
                 if spliceType == 'Linear':
-                    dataRow = linDataRow(origins)
+                    dataRows = linDataRow(origins)
                 elif spliceType == 'Cis':
-                    dataRow = cisDataRow(origins)
+                    dataRows = cisDataRow(origins)
                 # write the formated data to the row.
-                writer.writerow(dataRow)
+                for protData in dataRows:
+                    writer.writerow(protData)
             # write a blank row and repeat for the next peptide.
             writer.writerow([])
 
 # takes the linear origin data for a given peptide and formats it for writing in a line in the csv.
 def linDataRow(origins):
     # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
+    dataRows = []
     for tuple in origins:
         # initialise the first column of the row to be the name of the protein.
         dataRow = [tuple[0]]
@@ -210,12 +212,14 @@ def linDataRow(origins):
         # add the information to the next column of the row.
         for location in tuple[1]:
             dataRow.append(location)
-        # return the dataRow to be written to csv.
-        return dataRow
+        # append dataRow to dataRows
+        dataRows.append(dataRow)
+    # return dataRows to be written to csv.
+    return dataRows
 
 # takes the cis origin data for a given peptide and formats it for writing in a line in the csv.
 def cisDataRow(origins):
-    dataRow = []
+    dataRows = []
     # iterate through each tuple (there is a tuple for every protein that was found to produce a peptide)
     for tuple in origins:
         # initialise the first column of the data row to be the origin protein name.
@@ -246,7 +250,10 @@ def cisDataRow(origins):
             strng = strng[1:]
             # append the string which has been built up for the given split combination to the next column of the dataRow
             dataRow.append(strng)
-    return dataRow
+        # append the build up dataRow to dataRows
+        dataRows.append(dataRow)
+    # return dataRows
+    return dataRows
 
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
