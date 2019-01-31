@@ -8,9 +8,11 @@ from multiprocessing import Queue
 import logging
 import re
 
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+
 # Define maxLen
 maxLen = 20
-
+STOP = "STOP"
 
 def protFastaToDict(protFile):
     """
@@ -44,7 +46,7 @@ def pepFastaToList(pepFile):
     return pepList
 
 
-def generateOrigins(protData, pepFile, outputPath, linFlag, cisFlag, transFlag):
+def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
     """
     :param protData: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file with a list of peptides that you want to find the origin locations for
@@ -59,7 +61,8 @@ def generateOrigins(protData, pepFile, outputPath, linFlag, cisFlag, transFlag):
 
     if linFlag:
         # Find linear origins
-        findLinOrigins(protData, pepFile, outputPath)
+        print("About to do linear")
+        findLinOrigins(protDict, pepFile, outputPath)
     if cisFlag:
         # Find cis origins
         cisOriginDict = findCisOrigins(protDict, pepFile, outputPath)
@@ -69,42 +72,45 @@ def generateOrigins(protData, pepFile, outputPath, linFlag, cisFlag, transFlag):
         print('Trans')
 
 
-def findLinOrigins(protData, pepFile, outputPath):
+def findLinOrigins(protDict, pepFile, outputPath):
     """
-    :param protData: A dictionary containing protein sequences as the key with their origin as the value
+    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return linOriginsDict: Has the peptide as a key and a list of tuples of the form (originProtName, locations).
                             Locations store information on where the corresponding peptide could have been generated
                             from in the relevant origin protein.
     :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
     """
+    print("About to start process")
     numWorkers = multiprocessing.cpu_count()
     toWriteQueue = multiprocessing.Queue()
 
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processInitArgs,
-                                args=(toWriteQueue, protData))
+                                initargs=(toWriteQueue,))
+
     writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath))
     writerProcess.start()
-    print("ABOUT TO STARTED ")
+
     # iterate through each peptide
     with open(pepFile, "rU") as handle:
         for record in SeqIO.parse(handle, 'fasta'):
             pep = str(record.seq)
             logging.info('Process started for: ' + str(pep))
-            pool.apply_async(linearOrigin, args=(pep))
+            pool.apply_async(linearOrigin, args=(pep, protDict))
         pool.close()
         pool.join()
-    toWriteQueue.put('STOP')
+    logging.info("Pool joined")
+    toWriteQueue.put(STOP)
     writerProcess.join()
 
-def linearOrigin(pep):
+def linearOrigin(pep, protDict):
 
     linOriginDict = {}
-
     # initialise the key as an empty list in the outputDict
     linOriginDict[pep] = []
     # iterate through each protSeq in the keys of protDict
     for protSeq in protDict.keys():
+
         # initialise the locations holder
         locations = []
         # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
@@ -116,32 +122,36 @@ def linearOrigin(pep):
             locations.append([i for i in range(x.start(), x.end())])
         # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
         # iterating through proteins.
-        if locations is []:
-            continue
+        if locations:
+            linOriginDict[pep].append((protDict[protSeq], locations))
         # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
-        linOriginDict[pep].append((protDict[protSeq], locations))
-    linearOrigin.toWriteQueue.put(linOriginDict)
+    if linOriginDict[pep]:
+        linearOrigin.toWriteQueue.put(linOriginDict)
     logging.info('Process complete for: ' + str(pep))
 
 def linearWriter(toWriteQueue, outputPath):
     finalLinOriginDict = {}
+    outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
     while True:
         linOriginDict = toWriteQueue.get()
-        if linOriginDict is 'STOP':
+        if linOriginDict == STOP:
+            logging.info("STOPPED writer queue")
             break
 
-        finalLinOriginDict.update(linOriginDict)
-
+        for key, value in linOriginDict.items():
+            if key in finalLinOriginDict.keys():
+                finalLinOriginDict[key].append(linOriginDict[key])
+            else:
+                finalLinOriginDict[key] = linOriginDict[key]
     writeToFasta(finalLinOriginDict, outputPath, 'Linear')
 
 
-def processInitArgs(toWriteQueue, protData):
+def processInitArgs(toWriteQueue):
     """
     Designed to initialise arguments for main process
     """
-    global protDict
-    protDict = protData
+
     linearOrigin.toWriteQueue = toWriteQueue
 
 
@@ -234,8 +244,7 @@ def findCisIndexes(cisSplits, protSeq):
 # takes the origin dict of the form originDict[peptide] = [(proteinName, locations),(proteinName, locations)...] and writes
 # it to the filePath given. Also takes the spliceType argument to know how to format the csv and name it.
 def writeToFasta(originDict, outputPath, spliceType):
-    finalPath = outputPath + '_' + spliceType + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
-    with open(finalPath, 'a', newline='') as csv_file:
+    with open(outputPath, 'a', newline='') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
         # write a title with the splice type for the entire document, and a blank row underneath.
         title = spliceType + ' Peptide Locations'
