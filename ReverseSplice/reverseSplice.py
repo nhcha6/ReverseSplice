@@ -22,15 +22,9 @@ def protFastaToDict(protFile):
     protDict = {}
     with open(protFile, "rU") as handle:
         for record in SeqIO.parse(handle, 'fasta'):
-            origSeq = str(record.seq)
+            seq = str(record.seq)
             name = str(record.name).split('|')[1]
-            Ilocations = [i for i, ltr in enumerate(origSeq) if ltr == 'I']
-            seq = origSeq.replace('I','L')
-            nameILocTup = (name, Ilocations)
-            if seq in protDict.keys():
-                protDict[seq].append(nameILocTup)
-            else:
-                protDict[seq] = [nameILocTup]
+            protDict[name] = seq
     return protDict
 
 
@@ -74,7 +68,7 @@ def findLinOrigins(protDict, pepFile, outputPath):
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
                                 initargs=(toWriteQueue,))
 
-    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Linear'))
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Linear', protDict))
     writerProcess.start()
 
     # iterate through each peptide
@@ -96,28 +90,29 @@ def linearOrigin(pep, protDict):
     # initialise the key as an empty list in the outputDict
     linOriginDict[pep] = []
     # iterate through each protSeq in the keys of protDict
-    for protSeq in protDict.keys():
+    for key, value in protDict.items():
 
         # initialise the locations holder
         locations = []
         # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
         # of the substring in the string. The iterator is empty if the susbset does not appear at all.
         # We thus iterate through all instances of the subset and append it to a list of locations.
-        for x in re.finditer(pep.replace('I','L'), protSeq):
+        alteredPep = pep.replace('I','L')
+        alteredProt = value.replace('I','L')
+        for x in re.finditer(alteredPep, alteredProt):
             # convert the start index and end index to a list of indexes and then append to locations
             # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
             locations.append([i for i in range(x.start(), x.end())])
         # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
         # iterating through proteins.
         if locations:
-            linOriginDict[pep].append((protDict[protSeq], locations))
-        # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
-
+            # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
+            linOriginDict[pep].append((key, locations))
     linearOrigin.toWriteQueue.put(linOriginDict)
     logging.info('Process complete for: ' + str(pep))
 
 
-def linearWriter(toWriteQueue, outputPath, spliceType):
+def linearWriter(toWriteQueue, outputPath, spliceType, protDict):
     finalLinOriginDict = {}
 
     while True:
@@ -131,7 +126,7 @@ def linearWriter(toWriteQueue, outputPath, spliceType):
                 finalLinOriginDict[key].append(linOriginDict[key])
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
-    writeToFasta(finalLinOriginDict, outputPath, spliceType)
+    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict)
 
 
 def processLinInitArgs(toWriteQueue):
@@ -262,7 +257,7 @@ def findCisIndexes(cisSplits, protSeq):
 
 # takes the origin dict of the form originDict[peptide] = [(proteinName, locations),(proteinName, locations)...] and writes
 # it to the filePath given. Also takes the spliceType argument to know how to format the csv and name it.
-def writeToFasta(originDict, outputPath, spliceType):
+def writeToFasta(originDict, outputPath, spliceType, protDict):
     print(originDict)
     with open(outputPath, 'a', newline='') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
@@ -270,22 +265,18 @@ def writeToFasta(originDict, outputPath, spliceType):
         title = spliceType + ' Peptide Locations'
         writer.writerow([title])
         writer.writerow([])
+        header = ['Prot Name', 'Peptide', 'Pep in Prot', 'Location']
+        writer.writerow(header)
         # iterate throught the originDict to write each entry to file.
         for pep, origins in originDict.items():
-            # write the peptide to file in a row
-            infoRow = ['Peptide', pep]
-            writer.writerow(infoRow)
-            # write the header for the origin information.
-            pepHeader = ['Prot Name', 'Location']
-            writer.writerow(pepHeader)
             # if origins = [], the peptide could not be found in the prot.fasta file using the given splice type.
             if origins == []:
-                writer.writerow(['None', []])
+                continue
             # if origins contains data, an origin location was found and we must format the data accordingly.
             else:
                 # call the data configuration function relevant to the splice type.
                 if spliceType == 'Linear':
-                    dataRows = linDataRow(origins)
+                    dataRows = linDataRow(origins, pep, protDict)
                 elif spliceType == 'Cis':
                     dataRows = cisDataRow(origins)
                 # write the formated data to the row.
@@ -295,18 +286,22 @@ def writeToFasta(originDict, outputPath, spliceType):
             writer.writerow([])
 
 # takes the linear origin data for a given peptide and formats it for writing in a line in the csv.
-def linDataRow(origins):
+def linDataRow(origins, pep, protDict):
     # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
     dataRows = []
     for tuple in origins:
         # initialise the first column of the row to be the name of the protein.
-        dataRow = [tuple[0]]
+        firstHalf = [tuple[0]]
+        # append the peptide as it exist
+        firstHalf.append(pep)
         # the second element of the tuple stores the location data. For each location found in the current protein,
         # add the information to the next column of the row.
         for location in tuple[1]:
-            dataRow.append(location)
-        # append dataRow to dataRows
-        dataRows.append(dataRow)
+            protPep = protDict[tuple[0]][location[0]:location[-1]+1]
+            secondHalf = [protPep, location]
+            dataRow = firstHalf + secondHalf
+            # append dataRow to dataRows
+            dataRows.append(dataRow)
     # return dataRows to be written to csv.
     return dataRows
 
