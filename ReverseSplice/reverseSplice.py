@@ -19,16 +19,18 @@ def protFastaToDict(protFile):
     :param protFile: A Fasta file path (containing all the proteins which could serve as an origin location)
     :return protDict: A dictionary which contains a protein sequence as the key, and the protein name as the value.
     """
-
     protDict = {}
     with open(protFile, "rU") as handle:
         for record in SeqIO.parse(handle, 'fasta'):
-            seq = str(record.seq)
+            origSeq = str(record.seq)
             name = str(record.name).split('|')[1]
+            Ilocations = [i for i, ltr in enumerate(origSeq) if ltr == 'I']
+            seq = origSeq.replace('I','L')
+            nameILocTup = (name, Ilocations)
             if seq in protDict.keys():
-                protDict[seq].append(name)
+                protDict[seq].append(nameILocTup)
             else:
-                protDict[seq] = name
+                protDict[seq] = [nameILocTup]
     return protDict
 
 
@@ -101,7 +103,7 @@ def linearOrigin(pep, protDict):
         # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
         # of the substring in the string. The iterator is empty if the susbset does not appear at all.
         # We thus iterate through all instances of the subset and append it to a list of locations.
-        for x in re.finditer(pep, protSeq):
+        for x in re.finditer(pep.replace('I','L'), protSeq):
             # convert the start index and end index to a list of indexes and then append to locations
             # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
             locations.append([i for i in range(x.start(), x.end())])
@@ -261,6 +263,7 @@ def findCisIndexes(cisSplits, protSeq):
 # takes the origin dict of the form originDict[peptide] = [(proteinName, locations),(proteinName, locations)...] and writes
 # it to the filePath given. Also takes the spliceType argument to know how to format the csv and name it.
 def writeToFasta(originDict, outputPath, spliceType):
+    print(originDict)
     with open(outputPath, 'a', newline='') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
         # write a title with the splice type for the entire document, and a blank row underneath.
