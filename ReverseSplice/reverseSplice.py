@@ -16,6 +16,8 @@ logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 maxLen = 20
 STOP = "STOP"
 
+#LTLWTGNN
+
 def protFastaToDict(protFile):
     """
     :param protFile: A Fasta file path (containing all the proteins which could serve as an origin location)
