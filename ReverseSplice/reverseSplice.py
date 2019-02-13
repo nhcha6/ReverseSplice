@@ -106,7 +106,7 @@ def linearOrigin(pep, protDict):
             for x in re.finditer(alteredPep, alteredProt):
                 # convert the start index and end index to a list of indexes and then append to locations
                 # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
-                locations.append([i for i in range(x.start(), x.end())])
+                locations.append([x.start(), x.end() - 1])
             # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
             # iterating through proteins.
             if locations:
@@ -270,10 +270,10 @@ def findCisIndexes(cisSplits, protSeq):
         splitLoc2 = []
         # append the location of any split1 occurences in protSeq to splitLoc1
         for x in re.finditer(split1, protSeq):
-            splitLoc1.append([i for i in range(x.start(), x.end())])
+            splitLoc1.append([x.start(), x.end() - 1])
         # append the location of any split2 occurences in protSeq to splitLoc2
         for x in re.finditer(split2, protSeq):
-            splitLoc2.append([i for i in range(x.start(), x.end())])
+            splitLoc2.append([x.start(), x.end() - 1])
         # if either of the splitLocs are empty, the peptide cannot be formed using this split combo from the given
         # protSeq. Thus continue if either are empty.
         if splitLoc1 == [] or splitLoc2 == []:
@@ -338,7 +338,7 @@ def linDataRow(origins, pep, protDict):
         # the second element of the tuple stores the location data. For each location found in the current protein,
         # add the information to the next column of the row.
         for location in tuple[1]:
-            protPep = protDict[tuple[0]][location[0]:location[-1]+1]
+            protPep = protDict[tuple[0]][location[0]:location[1]+1]
             secondHalf = [protPep, location]
             dataRow = firstHalf + secondHalf
             # append dataRow to dataRows
@@ -361,17 +361,15 @@ def cisDataRowNew(origins, pep, protDict):
             split2List = splitCombo[1]
             for split1 in split1List:
                 for split2 in split2List:
-                    #print(split1)
-                    #print(split2)
                     prot = protDict[protName]
                     # check that they combine in the correct order
                     # check for a split of len1
                     if len(split1) == 1:
-                        pepInProt = split1 + prot[split2[0]:split2[-1]+1]
+                        pepInProt = split1 + prot[split2[0]:split2[1]+1]
                     elif len(split2) == 1:
-                        pepInProt = prot[split1[0]:split1[-1] + 1] + split2
+                        pepInProt = prot[split1[0]:split1[1] + 1] + split2
                     else:
-                        pepInProt = prot[split1[0]:split1[-1]+1] + prot[split2[0]:split2[-1]+1]
+                        pepInProt = prot[split1[0]:split1[1]+1] + prot[split2[0]:split2[1]+1]
                     location = str(split1) + ' and ' + str(split2)
                     secondHalf = [pepInProt]
                     secondHalf.append(location)
