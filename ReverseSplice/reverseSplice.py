@@ -7,6 +7,8 @@ import multiprocessing
 from multiprocessing import Queue
 import logging
 import re
+import io
+import traceback
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
@@ -85,31 +87,49 @@ def findLinOrigins(protDict, pepFile, outputPath):
 
 
 def linearOrigin(pep, protDict):
+    try:
+        linOriginDict = {}
+        # initialise the key as an empty list in the outputDict
+        linOriginDict[pep] = []
+        # iterate through each protSeq in the keys of protDict
+        for key, value in protDict.items():
 
-    linOriginDict = {}
-    # initialise the key as an empty list in the outputDict
-    linOriginDict[pep] = []
-    # iterate through each protSeq in the keys of protDict
-    for key, value in protDict.items():
+            # initialise the locations holder
+            locations = []
+            # change the Is to Ls for both the pep and prot, as they have identical masses and
+            # are indeciferable on mass spec.
+            alteredPep = pep.replace('I', 'L')
+            alteredProt = value.replace('I', 'L')
+            # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
+            # of the substring in the string. The iterator is empty if the susbset does not appear at all.
+            # We thus iterate through all instances of the subset and append it to a list of locations.
+            for x in re.finditer(alteredPep, alteredProt):
+                # convert the start index and end index to a list of indexes and then append to locations
+                # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
+                locations.append([i for i in range(x.start(), x.end())])
+            # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
+            # iterating through proteins.
+            if locations:
+                # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
+                linOriginDict[pep].append((key, locations))
+        linearOrigin.toWriteQueue.put(linOriginDict)
+        logging.info('Process complete for: ' + str(pep))
 
-        # initialise the locations holder
-        locations = []
-        # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
-        # of the substring in the string. The iterator is empty if the susbset does not appear at all.
-        # We thus iterate through all instances of the subset and append it to a list of locations.
-        alteredPep = pep.replace('I','L')
-        alteredProt = value.replace('I','L')
-        for x in re.finditer(alteredPep, alteredProt):
-            # convert the start index and end index to a list of indexes and then append to locations
-            # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
-            locations.append([i for i in range(x.start(), x.end())])
-        # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
-        # iterating through proteins.
-        if locations:
-            # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
-            linOriginDict[pep].append((key, locations))
-    linearOrigin.toWriteQueue.put(linOriginDict)
-    logging.info('Process complete for: ' + str(pep))
+    except Exception as e:
+
+        exc_buffer = io.StringIO()
+
+        traceback.print_exc(file=exc_buffer)
+
+        errorString = 'Uncaught exception in worker process: ' + pep + '\n%s'
+
+        logging.error(
+
+            errorString,
+
+            exc_buffer.getvalue())
+
+        raise e
 
 
 def linearWriter(toWriteQueue, outputPath, spliceType, protDict):
@@ -153,7 +173,7 @@ def findCisOrigins(protDict, pepFile, outputPath):
     toWriteQueue = multiprocessing.Queue()
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
                                 initargs=(toWriteQueue,))
-    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Cis'))
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Cis', protDict))
     writerProcess.start()
 
     # iterate through each pep in pepList
@@ -171,31 +191,50 @@ def findCisOrigins(protDict, pepFile, outputPath):
 
 def cisOrigin(pep, protDict):
 
-    cisOriginDict = {}
+    try:
+        cisOriginDict = {}
 
-    # initialise that key in the dictionary
-    cisOriginDict[pep] = []
-    # find the splits which could be combined to create the peptide using Cis splicing.
-    # cisSplits is a list of tups, where each tuple contains two complimentary splits.
-    # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
-    cisSplits = findCisSplits(pep)
-    # iterate through each protein in protDict.keys()
-    for protSeq in protDict.keys():
-        # ignore that protSeq if the linear splice comes from it already.
-        if pep in protSeq:
-            continue
-        # find the location data corresponding the current protSeq.
-        locations = findCisIndexes(cisSplits, protSeq)
-        # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
-        # If so, continue.
-        if locations == []:
-            continue
-        # if it is possible to create the peptide using cis splicing from the current protein, add the protName
-        # and locations tuple to cisOriginsDict
-        cisOriginDict[pep].append((protDict[protSeq], locations))
-    cisOrigin.toWriteQueue.put(cisOriginDict)
-    logging.info('Cis Process complete for: ' + str(pep))
+        # initialise that key in the dictionary
+        cisOriginDict[pep] = []
+        # find the splits which could be combined to create the peptide using Cis splicing.
+        # cisSplits is a list of tups, where each tuple contains two complimentary splits.
+        # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
+        cisSplits = findCisSplits(pep)
+        # iterate through each protein in protDict.keys()
+        for protName, protSeq in protDict.items():
+            # replace all Is with Js as they are indeciferable on mass spec.
+            alteredPep = pep.replace('I', 'L')
+            alteredProt = protSeq.replace('I', 'L')
+            # ignore that protSeq if the linear splice comes from it already.
+            if alteredPep in alteredProt:
+                continue
+            # find the location data corresponding the current protSeq.
+            locations = findCisIndexes(cisSplits, alteredProt)
+            # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
+            # If so, continue.
+            if locations == []:
+                continue
+            # if it is possible to create the peptide using cis splicing from the current protein, add the protName
+            # and locations tuple to cisOriginsDict
+            cisOriginDict[pep].append((protName, locations))
+        cisOrigin.toWriteQueue.put(cisOriginDict)
+        logging.info('Cis Process complete for: ' + str(pep))
 
+    except Exception as e:
+
+        exc_buffer = io.StringIO()
+
+        traceback.print_exc(file=exc_buffer)
+
+        errorString = 'Uncaught exception in worker process: ' + pep + '\n%s'
+
+        logging.error(
+
+            errorString,
+
+            exc_buffer.getvalue())
+
+        raise e
 
 def processCisInitArgs(toWriteQueue):
     cisOrigin.toWriteQueue = toWriteQueue
@@ -265,6 +304,8 @@ def writeToFasta(originDict, outputPath, spliceType, protDict):
         title = spliceType + ' Peptide Locations'
         writer.writerow([title])
         writer.writerow([])
+        # there is a single listing for every unique location/combination that a peptide can come from.
+        # they are listed under the format of the header
         header = ['Prot Name', 'Peptide', 'Pep in Prot', 'Location']
         writer.writerow(header)
         # iterate throught the originDict to write each entry to file.
