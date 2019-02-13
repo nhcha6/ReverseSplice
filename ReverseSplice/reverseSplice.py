@@ -319,7 +319,7 @@ def writeToFasta(originDict, outputPath, spliceType, protDict):
                 if spliceType == 'Linear':
                     dataRows = linDataRow(origins, pep, protDict)
                 elif spliceType == 'Cis':
-                    dataRows = cisDataRow(origins)
+                    dataRows = cisDataRowNew(origins, pep, protDict)
                 # write the formated data to the row.
                 for protData in dataRows:
                     writer.writerow(protData)
@@ -346,44 +346,38 @@ def linDataRow(origins, pep, protDict):
     # return dataRows to be written to csv.
     return dataRows
 
-# takes the cis origin data for a given peptide and formats it for writing in a line in the csv.
-def cisDataRow(origins):
+# takes the cis origin data for a given peptide and formats it for writing in a line in the csv
+def cisDataRowNew(origins, pep, protDict):
     dataRows = []
-    # iterate through each tuple (there is a tuple for every protein that was found to produce a peptide)
     for tuple in origins:
-        # initialise the first column of the data row to be the origin protein name.
-        dataRow = [tuple[0]]
-        # our location data is stored in tuple[1], it is in the form of the imbedded lists created findCisIndexes().
-        locations = tuple[1]
-        # locations contains a list for each pair of splits which can produce the peptide from the current protein.
-        for splitCombo in locations:
-            # we have a location string for each splits pair that produced the peptide. The string has the form:
-            # split1Location1 or split1Location2.... with split2Location1 or split2Location2......
-            # [1,2,3,4] or [5,6,7,8] with [9.10.11.12] or [13,14,15,16]
-            strng = " "
-            # each splitCombo list contains two lists: one for split1 locations one for split2 locations.
-            for splitOptions in splitCombo:
-                # if the string is not in its initialised form " ", we have switched from split1 to split2 locations and
-                # need to add the "with" to the string
-                if strng != " ":
-                    strng += " with "
-                # iterate through the locations of the specific split and add them to the strings with ors between them.
-                for split in splitOptions:
-                    if strng[-1] == ']':
-                        strng += " or "
-                        strng += str(split)
-                    # no "or" required if it is the first split to be added to the string, or if it follows the "with"
+        dataRow = []
+        protName = tuple[0]
+        locationData = tuple[1]
+        firstHalf = [protName]
+        firstHalf.append(pep)
+        #print(firstHalf)
+        for splitCombo in locationData:
+            split1List = splitCombo[0]
+            split2List = splitCombo[1]
+            for split1 in split1List:
+                for split2 in split2List:
+                    #print(split1)
+                    #print(split2)
+                    prot = protDict[protName]
+                    # check that they combine in the correct order
+                    # check for a split of len1
+                    if len(split1) == 1:
+                        pepInProt = split1 + prot[split2[0]:split2[-1]+1]
+                    elif len(split2) == 1:
+                        pepInProt = prot[split1[0]:split1[-1] + 1] + split2
                     else:
-                        strng += str(split)
-            # remove the initial space input at the start of the string
-            strng = strng[1:]
-            # append the string which has been built up for the given split combination to the next column of the dataRow
-            dataRow.append(strng)
-        # append the build up dataRow to dataRows
-        dataRows.append(dataRow)
-    # return dataRows
+                        pepInProt = prot[split1[0]:split1[-1]+1] + prot[split2[0]:split2[-1]+1]
+                    location = str(split1) + ' and ' + str(split2)
+                    secondHalf = [pepInProt]
+                    secondHalf.append(location)
+                    dataRow = firstHalf + secondHalf
+                    dataRows.append(dataRow)
     return dataRows
-
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
     protDict = protFastaToDict(proteinFile)
