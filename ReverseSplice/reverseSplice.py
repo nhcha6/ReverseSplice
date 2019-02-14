@@ -135,6 +135,7 @@ def linearOrigin(pep, protDict):
 
 
 def linearWriter(toWriteQueue, outputPath, spliceType, protDict):
+
     finalLinOriginDict = {}
 
     while True:
@@ -198,14 +199,15 @@ def cisOrigin(pep, protDict):
 
         # initialise that key in the dictionary
         cisOriginDict[pep] = []
+        # create the altered pep:
+        alteredPep = pep.replace('I', 'L')
         # find the splits which could be combined to create the peptide using Cis splicing.
         # cisSplits is a list of tups, where each tuple contains two complimentary splits.
         # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
-        cisSplits = findCisSplits(pep)
+        cisSplits = findCisSplits(alteredPep)
         # iterate through each protein in protDict.keys()
         for protName, protSeq in protDict.items():
             # replace all Is with Js as they are indeciferable on mass spec.
-            alteredPep = pep.replace('I', 'L')
             alteredProt = protSeq.replace('I', 'L')
             # ignore that protSeq if the linear splice comes from it already.
             if alteredPep in alteredProt:
@@ -260,7 +262,6 @@ def findCisSplits(pep):
 # Thus our final data structure looks like:
 # outerList[firstSplitCombo[firstSplitList[[1,2,3,4],[5,6,7,8]], secondSplitList[[9,10,11,12],[13,14,15,16]], secondSplitCombo[etc....]]
 def findCisIndexes(cisSplits, protSeq):
-
     totalLocations = []
     # iterate through each splitTup
     for splitTup in cisSplits:
@@ -299,7 +300,6 @@ def findCisIndexes(cisSplits, protSeq):
 # takes the origin dict of the form originDict[peptide] = [(proteinName, locations),(proteinName, locations)...] and writes
 # it to the filePath given. Also takes the spliceType argument to know how to format the csv and name it.
 def writeToFasta(originDict, outputPath, spliceType, protDict):
-    print(originDict)
     with open(outputPath, 'a', newline='') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
         # write a title with the splice type for the entire document, and a blank row underneath.
