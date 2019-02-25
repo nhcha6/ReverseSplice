@@ -91,9 +91,48 @@ class Example(QWidget):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
         if fname[0][-5:] == 'fasta':
             if self.sender() == self.importProtein:
+                # check that the input contains suitable sequence lengths for a protein
+                with open(fname[0], "rU") as handle:
+                    counter = 0
+                    totalLen = 0
+                    for record in SeqIO.parse(handle, 'fasta'):
+                        if counter == 100:
+                            break
+                        lngth = len(str(record.seq))
+                        totalLen += lngth
+                        counter += 1
+                # Calculate aveLen of initial sequences and ask if it is the correct input file if aveLen is less than 30.
+                aveLen = totalLen/counter
+                if aveLen < 30:
+                    response = QMessageBox.question(self, 'Message', 'The average length of the initial protein sequences is only: ' + str(round(aveLen, 1)) + '. Are you sure this is the correct protein file?')
+                    if response == QMessageBox.Yes:
+                        pass
+                    else:
+                        return
+                # If it passes the aveLen check, we reach here and fasta file us uploaded.
                 self.proteinFile = fname[0]
                 QMessageBox.about(self, 'Message', 'Protein input fasta successfully uploaded!')
             else:
+                # check that the input contains suitable sequence lengths for a peptide
+                with open(fname[0], "rU") as handle:
+                    counter = 0
+                    totalLen = 0
+                    for record in SeqIO.parse(handle, 'fasta'):
+                        if counter == 100:
+                            break
+                        lngth = len(str(record.seq))
+                        totalLen += lngth
+                        counter += 1
+                # Calculate aveLen of initial sequences and ask if it is the correct input file if aveLen is greater than 20.
+                aveLen = totalLen / counter
+                if aveLen > 20:
+                    response = QMessageBox.question(self, 'Message',
+                                         'The average length of the initial peptide sequences is: ' + str(round(aveLen, 1)) + '. Are you sure this is the correct peptide file?')
+                    if response == QMessageBox.Yes:
+                        pass
+                    else:
+                        return
+                # If it passes the aveLen check, we reach here and fasta file us uploaded.
                 self.peptideFile = fname[0]
                 QMessageBox.about(self, 'Message', 'Peptide input fasta successfully uploaded!')
         if self.proteinFile == "" or self.peptideFile == "":
