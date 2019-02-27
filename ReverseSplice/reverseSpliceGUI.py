@@ -7,6 +7,8 @@ from PyQt5.QtCore import pyqtSlot
 import sys
 from time import time
 from reverseSplice import *
+import platform
+import os
 
 class WorkerSignals(QObject):
     """
@@ -59,6 +61,14 @@ class Example(QWidget):
         self.setWindowTitle('Reverse Splicer')
         self.show()
 
+    def closeEvent(self, event):
+        print('closed')
+        # windows close command
+        if platform.system() == 'Windows':
+            os.system('taskkill /f /fi "WINDOWTITLE eq Reverse Splicer" /t')
+        # mac close command
+        else:
+            os.system("ps aux |grep reverseSpliceGUI | grep -v 'pattern_of_process_you_dont_want_to_kill' | awk '{print $2}' |xargs kill")
 
     def initialiseWidgets(self):
         self.importProtein = QPushButton('Import Protein Fasta')
