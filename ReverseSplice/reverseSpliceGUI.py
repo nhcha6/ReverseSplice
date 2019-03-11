@@ -148,9 +148,11 @@ class Example(QWidget):
         if self.proteinFile == "" or self.peptideFile == "":
             self.linCheckbox.setEnabled(False)
             self.cisCheckbox.setEnabled(False)
+            self.transCheckbox.setEnabled(False)
         else:
             self.linCheckbox.setEnabled(True)
             self.cisCheckbox.setEnabled(True)
+            self.transCheckbox.setEnabled(True)
 
     def getOutputPath(self):
 

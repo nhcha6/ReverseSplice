@@ -53,7 +53,7 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
         findCisOrigins(protDict, pepFile, outputPath)
     if transFlag:
         # Find trans origins > work in progress
-        print('Trans')
+        findTransOrigins(protDict, pepFile, outputPath)
 
 
 def findLinOrigins(protDict, pepFile, outputPath):
@@ -378,6 +378,40 @@ def cisDataRowNew(origins, pep, protDict):
                     dataRow = firstHalf + secondHalf
                     dataRows.append(dataRow)
     return dataRows
+
+def findTransOrigins(protDict, pepFile, outputPath):
+    """
+    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
+    :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
+    :return linOriginsDict: Has the peptide as a key and a list of tuples of the form (originProtName, locations).
+                            Locations store information on where the corresponding peptide could have been generated
+                            from in the relevant origin protein.
+    :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
+    """
+    numWorkers = multiprocessing.cpu_count()
+    toWriteQueue = multiprocessing.Queue()
+    outputPath = outputPath + '_' + 'Trans' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+
+    pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
+                                initargs=(toWriteQueue,))
+
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Linear', protDict))
+    writerProcess.start()
+
+    # iterate through each peptide
+    with open(pepFile, "rU") as handle:
+        for record in SeqIO.parse(handle, 'fasta'):
+            pep = str(record.seq)
+            logging.info('Process started for: ' + str(pep))
+            pool.apply_async(transOrigin, args=(pep, protDict))
+        pool.close()
+        pool.join()
+    logging.info("Pool joined")
+    toWriteQueue.put(STOP)
+    writerProcess.join()
+
+def transOrigin(pep,protDict):
+    print(pep)
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
     protDict = protFastaToDict(proteinFile)
