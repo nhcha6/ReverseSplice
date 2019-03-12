@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 # Define maxLen
 maxLen = 20
 STOP = "STOP"
+MIN_TRANS_LEN = 5
 
 #LTLWTGNN
 
@@ -411,7 +412,116 @@ def findTransOrigins(protDict, pepFile, outputPath):
     writerProcess.join()
 
 def transOrigin(pep,protDict):
-    print(pep)
+    try:
+        transOriginDict = {}
+
+        # initialise that key in the dictionary
+        transOriginDict[pep] = []
+        # create the altered pep:
+        alteredPep = pep.replace('I', 'L')
+        # find the splits which could be combined to create the peptide using Cis splicing.
+        # cisSplits is a list of tups, where each tuple contains two complimentary splits.
+        # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
+        transSplits = findCisSplits(alteredPep)
+
+        # format splits so it iterates in the order we want it to.
+        transSplits = editTransSplits(transSplits)
+
+        # pepFound bool allows us to skip all splits with both entries under MIN_TRANS_LEN if
+        # it has already been found.
+        pepFound == False
+
+        # iterate through transSlits
+        for splitCombo in transSplits:
+            # declare the two splits in the combo
+            split1 = splitCombo[0]
+            split2 = splitCombo[1]
+
+            # if the first entry is less than the min lengths and the pep has already been found
+            # we can break
+            if len(split1) < MIN_TRANS_LEN and pepFound:
+                break
+
+            # declare holder for split1 location
+            if len(split1) < MIN_TRANS_LEN:
+                splitLoc1 = []
+            else:
+                splitLoc1 = False
+            # declare holder for split2 location
+            if len(split2) < MIN_TRANS_LEN:
+                splitLoc2 = []
+            else:
+                splitLoc2 = False
+
+            # iterate through each protein in protDict.keys()
+            for protName, protSeq in protDict.items():
+                # replace all Is with Js as they are indeciferable on mass spec.
+                alteredProt = protSeq.replace('I', 'L')
+                # check for the presence of split1
+                if splitLoc1 == True:
+                    pass
+                else:
+                    for x in re.finditer(split1, alteredProt):
+                        if splitLoc1 == False:
+                            splitLoc1 = True
+                            break
+                        else:
+                            splitLoc1.append([x.start(), x.end() - 1])
+                # check for the presence of split2
+                if splitLoc2 == True:
+                    pass
+                else:
+                    for x in re.finditer(split2, alteredProt):
+                        if splitLoc2 == False:
+                            splitLoc2 = True
+                            break
+                        else:
+                            splitLoc2.append([protName, x.start(), x.end() - 1])
+
+            # check the above for loop iterates correctly
+            # we have a number of potential outputs. Each splitLoc may either be False, True, be an empty list of
+            # locations of a list containing locations. If the splitLocs are both True we simply change the pepFound
+            # flag to True. If the splitLocs are True and a list containing locations, or both a list containing
+            # locations, we add the location data to the transOriginsDict. If not, we continue without doing anything.
+
+            # if at the end of the entire iteration,there is no origins data but pepFound is True, we know that
+            # it was ONLY found using splits < MIN_SPLIT_LEN. If so, we need to add data refelcting this at the end.
+
+
+
+    except Exception as e:
+
+        exc_buffer = io.StringIO()
+
+        traceback.print_exc(file=exc_buffer)
+
+        errorString = 'Uncaught exception in worker process: ' + pep + '\n%s'
+
+        logging.error(
+
+            errorString,
+
+            exc_buffer.getvalue())
+
+        raise e
+
+def editTransSplits(splits):
+    splits1 = []
+    splits2 = []
+    for tuple in splits:
+        # sort the tuple so that the longest split appears first so that it is checked first
+        tuple = sorted(tuple)
+        # we want the tuples which have both splits < MIN_TRANS_LEN to be at the end. We only run
+        # them if none of the previous tuples have been found.
+        if len(tuple[1]) < MIN_TRANS_LEN:
+            splits2.append(tuple)
+        else:
+            splits1.append(tuple)
+    splitsNew = splits1 + splits2
+    return splitsNew
+
+
+
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
     protDict = protFastaToDict(proteinFile)
