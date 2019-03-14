@@ -151,7 +151,7 @@ def linearWriter(toWriteQueue, outputPath, spliceType, protDict):
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
     writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict)
-
+    print(finalLinOriginDict)
 
 def processLinInitArgs(toWriteQueue):
     """
@@ -323,6 +323,8 @@ def writeToFasta(originDict, outputPath, spliceType, protDict):
                     dataRows = linDataRow(origins, pep, protDict)
                 elif spliceType == 'Cis':
                     dataRows = cisDataRowNew(origins, pep, protDict)
+                else:
+                    dataRows = transDataRow(origins, pep, protDict)
                 # write the formated data to the row.
                 for protData in dataRows:
                     writer.writerow(protData)
@@ -393,10 +395,10 @@ def findTransOrigins(protDict, pepFile, outputPath):
     toWriteQueue = multiprocessing.Queue()
     outputPath = outputPath + '_' + 'Trans' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
-    pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
+    pool = multiprocessing.Pool(processes=numWorkers, initializer=processTransInitArgs,
                                 initargs=(toWriteQueue,))
 
-    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Linear', protDict))
+    writerProcess = multiprocessing.Process(target=linearWriter, args=(toWriteQueue, outputPath, 'Trans', protDict))
     writerProcess.start()
 
     # iterate through each peptide
@@ -429,7 +431,7 @@ def transOrigin(pep,protDict):
 
         # pepFound bool allows us to skip all splits with both entries under MIN_TRANS_LEN if
         # it has already been found.
-        pepFound == False
+        pepFound = False
 
         # iterate through transSlits
         for splitCombo in transSplits:
@@ -443,12 +445,12 @@ def transOrigin(pep,protDict):
                 break
 
             # declare holder for split1 location
-            if len(split1) < MIN_TRANS_LEN:
+            if len(split1) >= MIN_TRANS_LEN:
                 splitLoc1 = []
             else:
                 splitLoc1 = False
             # declare holder for split2 location
-            if len(split2) < MIN_TRANS_LEN:
+            if len(split2) >= MIN_TRANS_LEN:
                 splitLoc2 = []
             else:
                 splitLoc2 = False
@@ -466,7 +468,7 @@ def transOrigin(pep,protDict):
                             splitLoc1 = True
                             break
                         else:
-                            splitLoc1.append([x.start(), x.end() - 1])
+                            splitLoc1.append([protName, x.start(), x.end() - 1])
                 # check for the presence of split2
                 if splitLoc2 == True:
                     pass
@@ -478,16 +480,27 @@ def transOrigin(pep,protDict):
                         else:
                             splitLoc2.append([protName, x.start(), x.end() - 1])
 
-            # check the above for loop iterates correctly
-            # we have a number of potential outputs. Each splitLoc may either be False, True, be an empty list of
-            # locations of a list containing locations. If the splitLocs are both True we simply change the pepFound
-            # flag to True. If the splitLocs are True and a list containing locations, or both a list containing
-            # locations, we add the location data to the transOriginsDict. If not, we continue without doing anything.
+            if splitLoc1 == False or splitLoc2 == False:
+                continue
+            if splitLoc1 == True and splitLoc2 == True:
+                pepFound = True
+                continue
 
-            # if at the end of the entire iteration,there is no origins data but pepFound is True, we know that
-            # it was ONLY found using splits < MIN_SPLIT_LEN. If so, we need to add data refelcting this at the end.
+            if splitLoc1 != [] and splitLoc2 == True:
+                toAppend = splitLoc1
+            elif splitLoc2 != [] and splitLoc1 == True:
+                toAppend = splitLoc2
+            elif splitLoc1 != [] and splitLoc2 != []:
+                toAppend = splitLoc1 + splitLoc2
+            else:
+                continue
 
+            transOriginDict[pep] += toAppend
 
+        if transOriginDict[pep] == [] and pepFound:
+            transOriginDict[pep] = [True]
+
+        transOrigin.toWriteQueue.put(transOriginDict)
 
     except Exception as e:
 
@@ -520,7 +533,24 @@ def editTransSplits(splits):
     splitsNew = splits1 + splits2
     return splitsNew
 
+def transDataRow(origins, pep, protDict):
+    dataRows = []
+    for location in origins:
+        if location == True:
+             dataRow = [pep, "Formed only by cleavages under max length."]
+             dataRows.append(dataRow)
+        else:
+            protName = location[0]
+            startRef = location[1]
+            endRef = location[2] + 1
+            pepInProt = protDict[protName][startRef:endRef]
+            dataRow = [location[0], pep, pepInProt, [startRef + 1, endRef]]
+            dataRows.append(dataRow)
+    return dataRows
 
+
+def processTransInitArgs(toWriteQueue):
+    transOrigin.toWriteQueue = toWriteQueue
 
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
