@@ -81,7 +81,7 @@ class Example(QWidget):
 
         self.generateOutput = QPushButton('Generate Output')
         self.generateOutput.setEnabled(False)
-        self.grid.addWidget(self.generateOutput, 6, 1)
+        self.grid.addWidget(self.generateOutput, 7, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
         self.linCheckbox = QCheckBox('Linear')
@@ -93,9 +93,14 @@ class Example(QWidget):
         self.transCheckbox = QCheckBox('Trans')
         self.transCheckbox.setEnabled(False)
         self.transCheckbox.stateChanged.connect(self.enableOutput)
+        self.minTransLen = QComboBox()
+        for i in range(2,9):
+            self.minTransLen.addItem(str(i))
+        self.minTransLen.setEnabled(False)
         self.grid.addWidget(self.linCheckbox, 3, 1)
         self.grid.addWidget(self.cisCheckbox, 4, 1)
         self.grid.addWidget(self.transCheckbox, 5, 1)
+        self.grid.addWidget(self.minTransLen, 6, 1)
 
     def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
@@ -217,11 +222,11 @@ class Example(QWidget):
         outputFile = self.outputPath + '/' + self.fileName.text()
         print(outputFile)
         self.outputGen = OutputGenerator(self.createOutput, outputFile, self.proteinFile, self.peptideFile, self.linFlag,
-                                         self.cisFlag, self.transFlag)
+                                         self.cisFlag, self.transFlag, int(self.minTransLength))
         self.outputGen.signals.finished.connect(self.outputFinished)
         self.threadpool.start(self.outputGen)
         self.outputLabel = QLabel("Generating Output. Please Wait!")
-        self.grid.addWidget(self.outputLabel, 7, 1)
+        self.grid.addWidget(self.outputLabel, 8, 1)
         # close the output name box.
         self.outputNameBox.close()
 
@@ -235,24 +240,30 @@ class Example(QWidget):
             self.linFlag = self.linCheckbox.isChecked()
             self.cisFlag = self.cisCheckbox.isChecked()
             self.transFlag = self.transCheckbox.isChecked()
+            self.minTransLength = self.minTransLen.currentText()
 
             reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
                                                             "Please ensure you haven't switched the protein and peptide input." + '\n'+ '\n' +
                                                             'Protein File: ' + self.proteinFile + '\n' + '\n' +
                                                             'Peptide File: ' + self.peptideFile + '\n' + '\n' +
+                                                            'Min Cleavage Length: ' + self.minTransLength + '\n' +
                                                             'Linear: ' + str(self.linFlag) + ', Cis: ' + str(self.cisFlag) + ', Trans: ' + str(self.transFlag))
 
             if reply == QMessageBox.Yes:
                 self.getOutputPath()
 
     def enableOutput(self):
+        if self.transCheckbox.isChecked():
+            self.minTransLen.setEnabled(True)
+        else:
+            self.minTransLen.setEnabled(False)
         if self.linCheckbox.isChecked() or self.cisCheckbox.isChecked() or self.transCheckbox.isChecked():
             self.generateOutput.setEnabled(True)
         else:
             self.generateOutput.setEnabled(False)
 
-    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
-        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag)
+    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransFlag):
+        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransFlag)
 
     def outputFinished(self):
         QMessageBox.about(self, "Message", "All done!")

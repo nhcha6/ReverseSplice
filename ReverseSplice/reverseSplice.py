@@ -15,7 +15,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 # Define maxLen
 maxLen = 20
 STOP = "STOP"
-MIN_TRANS_LEN = 5
 
 #LTLWTGNN
 
@@ -33,7 +32,7 @@ def protFastaToDict(protFile):
     return protDict
 
 
-def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
+def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
     """
     :param protData: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file with a list of peptides that you want to find the origin locations for
@@ -54,7 +53,7 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag):
         findCisOrigins(protDict, pepFile, outputPath)
     if transFlag:
         # Find trans origins > work in progress
-        findTransOrigins(protDict, pepFile, outputPath)
+        findTransOrigins(protDict, pepFile, outputPath, minTransLen)
 
 
 def findLinOrigins(protDict, pepFile, outputPath):
@@ -151,7 +150,6 @@ def linearWriter(toWriteQueue, outputPath, spliceType, protDict):
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
     writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict)
-    print(finalLinOriginDict)
 
 def processLinInitArgs(toWriteQueue):
     """
@@ -382,7 +380,7 @@ def cisDataRowNew(origins, pep, protDict):
                     dataRows.append(dataRow)
     return dataRows
 
-def findTransOrigins(protDict, pepFile, outputPath):
+def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
     """
     :param protDict: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
@@ -406,14 +404,14 @@ def findTransOrigins(protDict, pepFile, outputPath):
         for record in SeqIO.parse(handle, 'fasta'):
             pep = str(record.seq)
             logging.info('Process started for: ' + str(pep))
-            pool.apply_async(transOrigin, args=(pep, protDict))
+            pool.apply_async(transOrigin, args=(pep, protDict, minTransLen))
         pool.close()
         pool.join()
     logging.info("Pool joined")
     toWriteQueue.put(STOP)
     writerProcess.join()
 
-def transOrigin(pep,protDict):
+def transOrigin(pep,protDict, minTransLen):
     try:
         transOriginDict = {}
 
@@ -427,7 +425,7 @@ def transOrigin(pep,protDict):
         transSplits = findCisSplits(alteredPep)
 
         # format splits so it iterates in the order we want it to.
-        transSplits = editTransSplits(transSplits)
+        transSplits = editTransSplits(transSplits, minTransLen)
 
         # pepFound bool allows us to skip all splits with both entries under MIN_TRANS_LEN if
         # it has already been found.
@@ -441,16 +439,16 @@ def transOrigin(pep,protDict):
 
             # if the first entry is less than the min lengths and the pep has already been found
             # we can break
-            if len(split1) < MIN_TRANS_LEN and pepFound:
+            if len(split1) < minTransLen and pepFound:
                 break
 
             # declare holder for split1 location
-            if len(split1) >= MIN_TRANS_LEN:
+            if len(split1) >= minTransLen:
                 splitLoc1 = []
             else:
                 splitLoc1 = False
             # declare holder for split2 location
-            if len(split2) >= MIN_TRANS_LEN:
+            if len(split2) >= minTransLen:
                 splitLoc2 = []
             else:
                 splitLoc2 = False
@@ -518,7 +516,7 @@ def transOrigin(pep,protDict):
 
         raise e
 
-def editTransSplits(splits):
+def editTransSplits(splits, minTransLen):
     splits1 = []
     splits2 = []
     for tuple in splits:
@@ -526,7 +524,7 @@ def editTransSplits(splits):
         tuple = sorted(tuple)
         # we want the tuples which have both splits < MIN_TRANS_LEN to be at the end. We only run
         # them if none of the previous tuples have been found.
-        if len(tuple[1]) < MIN_TRANS_LEN:
+        if len(tuple[1]) < minTransLen:
             splits2.append(tuple)
         else:
             splits1.append(tuple)
@@ -553,6 +551,6 @@ def processTransInitArgs(toWriteQueue):
     transOrigin.toWriteQueue = toWriteQueue
 
 
-def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag):
+def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransLen):
     protDict = protFastaToDict(proteinFile)
-    generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag)
+    generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
