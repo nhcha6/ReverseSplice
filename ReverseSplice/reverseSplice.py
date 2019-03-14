@@ -203,7 +203,7 @@ def cisOrigin(pep, protDict):
         # find the splits which could be combined to create the peptide using Cis splicing.
         # cisSplits is a list of tups, where each tuple contains two complimentary splits.
         # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
-        cisSplits = findCisSplits(alteredPep)
+        cisSplits = findSplits(alteredPep)
         # iterate through each protein in protDict.keys()
         for protName, protSeq in protDict.items():
             # replace all Is with Js as they are indeciferable on mass spec.
@@ -244,7 +244,7 @@ def processCisInitArgs(toWriteQueue):
 
 # takes a peptide and returns a list of tuples, where each tuple is a possible pair of subsequences which
 # could be combined to make the peptide.
-def findCisSplits(pep):
+def findSplits(pep):
     cisSplits = []
     lngth = len(pep)
     for i in range(1,lngth):
@@ -384,10 +384,9 @@ def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
     """
     :param protDict: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
-    :return linOriginsDict: Has the peptide as a key and a list of tuples of the form (originProtName, locations).
-                            Locations store information on where the corresponding peptide could have been generated
-                            from in the relevant origin protein.
-    :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
+    :return transOriginsDict:
+
+    :Data structure summary: transOriginsDict
     """
     numWorkers = multiprocessing.cpu_count()
     toWriteQueue = multiprocessing.Queue()
@@ -413,25 +412,25 @@ def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
 
 def transOrigin(pep,protDict, minTransLen):
     try:
+        # initialise the dictionary
         transOriginDict = {}
-
         # initialise that key in the dictionary
         transOriginDict[pep] = []
         # create the altered pep:
         alteredPep = pep.replace('I', 'L')
-        # find the splits which could be combined to create the peptide using Cis splicing.
-        # cisSplits is a list of tups, where each tuple contains two complimentary splits.
-        # cisSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
-        transSplits = findCisSplits(alteredPep)
+        # find the splits which could be combined to create the peptide using trans or cis splicing.
+        # transSplits is a list of tups, where each tuple contains two complimentary splits.
+        # transSplits = [('A', 'BCD'),('AB', 'CD'),('ABC', 'D')]
+        transSplits = findSplits(alteredPep)
 
         # format splits so it iterates in the order we want it to.
         transSplits = editTransSplits(transSplits, minTransLen)
 
-        # pepFound bool allows us to skip all splits with both entries under MIN_TRANS_LEN if
+        # pepFound bool allows us to skip all splits with both entries under minTransLen if
         # it has already been found.
         pepFound = False
 
-        # iterate through transSlits
+        # iterate through each combination in transSplits
         for splitCombo in transSplits:
             # declare the two splits in the combo
             split1 = splitCombo[0]
@@ -439,15 +438,20 @@ def transOrigin(pep,protDict, minTransLen):
 
             # if the first entry is less than the min lengths and the pep has already been found
             # we can break
-            if len(split1) < minTransLen and pepFound:
+            if len(split2) < minTransLen and (pepFound or transOriginDict[pep]!=[]):
+                print(split1)
+                print(split2)
                 break
 
-            # declare holder for split1 location
+            # declare holder for split1 location. If the corresponding split is greater than minTransLen, we want to
+            # initialise it as a list which will store possible locations. If it is smaller than minTransLen, we don't
+            # care about the location data just if it can be found or not. Thus we initialise it as False, and later
+            # will change it to True if it is founds anywhere.
             if len(split1) >= minTransLen:
                 splitLoc1 = []
             else:
                 splitLoc1 = False
-            # declare holder for split2 location
+            # declare holder for split2 location in the same format as split1
             if len(split2) >= minTransLen:
                 splitLoc2 = []
             else:
@@ -457,9 +461,16 @@ def transOrigin(pep,protDict, minTransLen):
             for protName, protSeq in protDict.items():
                 # replace all Is with Js as they are indeciferable on mass spec.
                 alteredProt = protSeq.replace('I', 'L')
-                # check for the presence of split1
+
+                # check for presence of split1 in the current protein
+                # if splitLoc1 == True, we know that this split has been found and we can
+                # continue through without checking the current protein for it.
                 if splitLoc1 == True:
                     pass
+                # if it is not True, we check for its presence in alteredProt. We build up an iterable
+                # which stores the locations of the split in protein. If it can't be found it won't enter the
+                # for loop. If at least one can be found, splitLoc1 is either set to True, or the location
+                # information is appended to it.
                 else:
                     for x in re.finditer(split1, alteredProt):
                         if splitLoc1 == False:
@@ -467,7 +478,8 @@ def transOrigin(pep,protDict, minTransLen):
                             break
                         else:
                             splitLoc1.append([protName, x.start(), x.end() - 1])
-                # check for the presence of split2
+
+                # check for the presence of split2, exactly the same as we have in splitLoc1
                 if splitLoc2 == True:
                     pass
                 else:
@@ -478,26 +490,45 @@ def transOrigin(pep,protDict, minTransLen):
                         else:
                             splitLoc2.append([protName, x.start(), x.end() - 1])
 
+            # When we get to here we have completed an iteration through every protein for the current combination of
+            # splits. We know need to decide what to do with splitLoc1 based on what data it holds.
+            # if either splitLoc variables equal False (one of the splits was less than minLenTrans and not found),
+            # we want to continue to the next iteration without doing anything.
             if splitLoc1 == False or splitLoc2 == False:
                 continue
+            # if both splitLoc variables are True (both splits were found but both are smaller than minLenTrans),
+            # we want to update pepFound and continue without adding to transOriginsDict.
             if splitLoc1 == True and splitLoc2 == True:
                 pepFound = True
                 continue
 
+            # we reach here if at least one of the splits was longer than minTransLen and thus the corresponding
+            # splitLoc was initialised as a list.
+            # if splitLoc1 is not an empty list and splitLoc2 is True, this split combination can be used to create
+            # the trans splicing of the pep. Thus, we update toAppend with the location data stored in splitLoc1.
             if splitLoc1 != [] and splitLoc2 == True:
                 toAppend = splitLoc1
+            # same scenario as previous except splitLoc1 and 2 are switched.
             elif splitLoc2 != [] and splitLoc1 == True:
                 toAppend = splitLoc2
+            # if we get to here both splitLocs must be lists. If they both aren't empty, both splits were found and
+            # thus both splitLoc data must be added to toAppend.
             elif splitLoc1 != [] and splitLoc2 != []:
                 toAppend = splitLoc1 + splitLoc2
             else:
                 continue
 
+            # add toAppend to transOriginDict. toAppend will be empty if no transSplicing was found involving
+            # splits of length greater than minTransLen.
             transOriginDict[pep] += toAppend
 
+        # if after iterating through all splitCombos and all proteins for each combo no location data has been added,
+        # we must check if pepFound has been set to True to ensure no splitCombos with split lengths < minTransLen
+        # were found. If it is, simplt add True to the dictionary.
         if transOriginDict[pep] == [] and pepFound:
             transOriginDict[pep] = [True]
 
+        # add this transOriginDict (related to the given pep) to the writer function.
         transOrigin.toWriteQueue.put(transOriginDict)
 
     except Exception as e:
@@ -517,11 +548,12 @@ def transOrigin(pep,protDict, minTransLen):
         raise e
 
 def editTransSplits(splits, minTransLen):
+    #print(splits)
     splits1 = []
     splits2 = []
     for tuple in splits:
         # sort the tuple so that the longest split appears first so that it is checked first
-        tuple = sorted(tuple)
+        tuple = sorted(tuple, key=len)
         # we want the tuples which have both splits < MIN_TRANS_LEN to be at the end. We only run
         # them if none of the previous tuples have been found.
         if len(tuple[1]) < minTransLen:
@@ -529,6 +561,7 @@ def editTransSplits(splits, minTransLen):
         else:
             splits1.append(tuple)
     splitsNew = splits1 + splits2
+    #print(splitsNew)
     return splitsNew
 
 def transDataRow(origins, pep, protDict):
