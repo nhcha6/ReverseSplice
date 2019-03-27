@@ -81,7 +81,7 @@ class Example(QWidget):
 
         self.generateOutput = QPushButton('Generate Output')
         self.generateOutput.setEnabled(False)
-        self.grid.addWidget(self.generateOutput, 7, 1)
+        self.grid.addWidget(self.generateOutput, 8, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
         self.linCheckbox = QCheckBox('Linear')
@@ -94,13 +94,16 @@ class Example(QWidget):
         self.transCheckbox.setEnabled(False)
         self.transCheckbox.stateChanged.connect(self.enableOutput)
         self.minTransLen = QComboBox()
+        self.minTransLabel = QLabel("Min Trans Cleavage Length:")
         for i in range(2,9):
             self.minTransLen.addItem(str(i))
         self.minTransLen.setEnabled(False)
+        self.minTransLabel.setEnabled(False)
         self.grid.addWidget(self.linCheckbox, 3, 1)
         self.grid.addWidget(self.cisCheckbox, 4, 1)
         self.grid.addWidget(self.transCheckbox, 5, 1)
-        self.grid.addWidget(self.minTransLen, 6, 1)
+        self.grid.addWidget(self.minTransLen, 7, 1)
+        self.grid.addWidget(self.minTransLabel, 6, 1)
 
     def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
@@ -226,7 +229,7 @@ class Example(QWidget):
         self.outputGen.signals.finished.connect(self.outputFinished)
         self.threadpool.start(self.outputGen)
         self.outputLabel = QLabel("Generating Output. Please Wait!")
-        self.grid.addWidget(self.outputLabel, 8, 1)
+        self.grid.addWidget(self.outputLabel, 9, 1)
         # close the output name box.
         self.outputNameBox.close()
 
@@ -255,8 +258,10 @@ class Example(QWidget):
     def enableOutput(self):
         if self.transCheckbox.isChecked():
             self.minTransLen.setEnabled(True)
+            self.minTransLabel.setEnabled(True)
         else:
             self.minTransLen.setEnabled(False)
+            self.minTransLabel.setEnabled(False)
         if self.linCheckbox.isChecked() or self.cisCheckbox.isChecked() or self.transCheckbox.isChecked():
             self.generateOutput.setEnabled(True)
         else:
