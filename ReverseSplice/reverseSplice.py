@@ -439,8 +439,6 @@ def transOrigin(pep,protDict, minTransLen):
             # if the first entry is less than the min lengths and the pep has already been found
             # we can break
             if len(split2) < minTransLen and (pepFound or transOriginDict[pep]!=[]):
-                print(split1)
-                print(split2)
                 break
 
             # declare holder for split1 location. If the corresponding split is greater than minTransLen, we want to
