@@ -18,6 +18,28 @@ STOP = "STOP"
 
 #LTLWTGNN
 
+def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransLen):
+    """
+    Called from Example.createOutput() in reverseSpliceGUI.py, this function recieves the input parameters from the
+    GUI code, creates the protein dictionary from the input path and then calls generateOrigins to begin the
+    origin computation process.
+
+    :param outputPath: the path of the output file as selected by the user.
+    :param proteinFile: the path of the protein sequence file.
+    :param peptideFile: the path of the peptide sequence file.
+    :param linFlag: True if the user wishes to return a file with information on where each peptide could have been
+    generated from via linear splicing.
+    :param cisFlag: True if the user wishes to return a file with information on where each peptide could have been
+    generated from via cis splicing.
+    :param transFlag: True if the user wishes to return a file with information on where each peptide could have been
+    generated from via trans splicing.
+    :param minTransLen: the minimum length a cleavage must be for it to be reported in the output file as an origin
+    for a trans spliced peptide.
+    :return:
+    """
+    protDict = protFastaToDict(proteinFile)
+    generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
+
 def protFastaToDict(protFile):
     """
     Called by generateOutput(), this function stores all the sequences in a fasta file in a dictionary.
@@ -32,7 +54,6 @@ def protFastaToDict(protFile):
             name = str(record.name).split('|')[1]
             protDict[name] = seq
     return protDict
-
 
 def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
     """
@@ -60,12 +81,12 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, 
         # Find trans origins > work in progress
         findTransOrigins(protDict, pepFile, outputPath, minTransLen)
 
-
 def findLinOrigins(protDict, pepFile, outputPath):
     """
-    Called by generateOrigins() if the user has selected to return the linear splicing origins of the input peptides.
-    This function takes a dictionary of proteins and a peptide file, and returns the locations within the proteins
-    that each peptide could have been formed via linear splicing.
+    Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
+    where within the protein list each peptide could have been generated from via linear splicing. Each process it
+    creates outputs a dictionary with the peptides as keys and a list of tuples containing origin peptide names and the
+    splitsLocation data for linear splicing as the value.
 
     :param protDict: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
@@ -81,7 +102,7 @@ def findLinOrigins(protDict, pepFile, outputPath):
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
                                 initargs=(toWriteQueue,))
 
-    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, protDict))
+    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDict))
     writerProcess.start()
 
     # iterate through each peptide
@@ -95,7 +116,6 @@ def findLinOrigins(protDict, pepFile, outputPath):
     logging.info("Pool joined")
     toWriteQueue.put(STOP)
     writerProcess.join()
-
 
 def linearOrigin(pep, protDict):
     """
@@ -152,36 +172,6 @@ def linearOrigin(pep, protDict):
 
         raise e
 
-
-def writer(toWriteQueue, outputPath, protDict):
-    """
-    The writer function for linear spliced origin computation. This function simply pulls origin data to be written
-    to file from the toWriteQueue, stores it in the finalLinOriginDict and once all processes are finished, writes
-    the final output csv. finalLinOriginsData structure: { inputPeptide: locationDataStructure }
-    Note that the locationDataStructure differs for trans, linear and cis splicing.
-
-    :param toWriteQueue: the multiprocessing.Queue which the origin data constructed by linearOrigin() is pushed to
-    at the end of each process.
-    :param outputPath: the path of the linear output csv file.
-    :param protDict: the dictionary containing all the input proteins, which is required when writing to file.
-    :return:
-    """
-
-    finalLinOriginDict = {}
-
-    while True:
-        linOriginDict = toWriteQueue.get()
-        if linOriginDict == STOP:
-            logging.info("STOPPED writer queue")
-            break
-
-        for key, value in linOriginDict.items():
-            if key in finalLinOriginDict.keys():
-                finalLinOriginDict[key].append(linOriginDict[key])
-            else:
-                finalLinOriginDict[key] = linOriginDict[key]
-    writeToFasta(finalLinOriginDict, outputPath, 'Linear', protDict)
-
 def processLinInitArgs(toWriteQueue):
     """
     Called from findLinOrigins() when the pool is initialised, this function simply gives linearOrigin() (the worker
@@ -190,15 +180,13 @@ def processLinInitArgs(toWriteQueue):
 
     linearOrigin.toWriteQueue = toWriteQueue
 
-
-# as with findLinOrigins(), this takes the protDict and pepList and outputs a dictionary with the peptides as
-# keys and a list of tuples containing origin peptide names and the splitsLocation data as the value.
-# Data structure summary: cisOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
 def findCisOrigins(protDict, pepFile, outputPath):
     """
-    Called by generateOrigins(), this function takes the protDict and pepList and outputs a dictionary with the
-    peptides as keys and a list of tuples containing origin peptide names and the splitsLocation data for cis
-    splicing as the value.
+    Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
+    where within the protein list each peptide could have been generated from via cis splicing. Each process it
+    creates outputs a dictionary with the peptides as keys and a list of tuples containing origin peptide names and the
+    splitsLocation data for cis splicing as the value.
+
     Data structure summary: cisOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
 
     :param protDict: A dictionary containing protein sequences as the key with their origin as the value
@@ -293,16 +281,15 @@ def processCisInitArgs(toWriteQueue):
 
     cisOrigin.toWriteQueue = toWriteQueue
 
-# takes a peptide and returns a list of tuples, where each tuple is a possible pair of subsequences which
-# could be combined to make the peptide.
 def findSplits(pep):
     """
-    Called by cisOrigins(), this function takes a peptide and returns a list of tuples, where each tuple is a possible
-    pair of subsequences which could be combined to make the peptide.
+    Called by cisOrigins() and transOrigins(), this function takes a peptide and returns a list of tuples, where each
+    tuple is a possible pair of subsequences which could be combined to make the peptide.
 
     :param pep: the input peptide. From this peptide, a list of all the pair of cleavages which could be combined to
     make the peptide is returned.
-    :return:
+    :return cisSplits: a list of tuples, where each tuple is a possible pair of subsequences which could be combined
+    to make the peptide.
     """
     cisSplits = []
     lngth = len(pep)
@@ -312,13 +299,6 @@ def findSplits(pep):
         cisSplits.append((split1,split2))
     return cisSplits
 
-# returns the location data of where different pairs of cisSplits (which combine to form a given peptide)
-# exist in a protein sequence. The data structure is a series of embedded lists.
-# The outer list contains lists relating to each cisSplit combination which has both splits found in the protSeq.
-# The list relating to each cisSplit combination contains two lists; a list of all the places a first split can
-# occur and a list of all the places the second split can occur.
-# Thus our final data structure looks like:
-# outerList[firstSplitCombo[firstSplitList[[1,2,3,4],[5,6,7,8]], secondSplitList[[9,10,11,12],[13,14,15,16]], secondSplitCombo[etc....]]
 def findCisIndexes(cisSplits, protSeq):
     """
     Called by cisOrigins(), this function returns the location data of where different pairs of cisSplits (which
@@ -369,121 +349,17 @@ def findCisIndexes(cisSplits, protSeq):
         totalLocations.append(splitLocations)
     return totalLocations
 
-
-# takes the origin dict of the form originDict[peptide] = [(proteinName, locations),(proteinName, locations)...] and writes
-# it to the filePath given. Also takes the spliceType argument to know how to format the csv and name it.
-def writeToFasta(originDict, outputPath, spliceType, protDict):
-    """
-    This function is called by writer(), and takes the ouptut data dictionary and writes it to the filePath given.
-    Also takes the spliceType argument to know how to format the csv and name it.
-
-    :param originDict: the dictionary containing the input peptides as keys and the location data as values. Structure:
-    originDict[peptide] = [(proteinName, locations),(proteinName, locations)...]
-    :param outputPath: the file location and file name to which the output is to be written.
-    :param spliceType: the type of splicing being computed. Each splice type has a different output syntax, and the
-    type of splicing also needs to be added to the output file name.
-    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
-    peptide and origin due to the program not treating I/J differently.
-    :return:
-    """
-    with open(outputPath, 'a', newline='') as csv_file:
-        writer = csv.writer(csv_file, delimiter=',')
-        # write a title with the splice type for the entire document, and a blank row underneath.
-        title = spliceType + ' Peptide Locations'
-        writer.writerow([title])
-        writer.writerow([])
-        # there is a single listing for every unique location/combination that a peptide can come from.
-        # they are listed under the format of the header
-        header = ['Prot Name', 'Peptide', 'Pep in Prot', 'Location']
-        writer.writerow(header)
-        # iterate throught the originDict to write each entry to file.
-        for pep, origins in originDict.items():
-            # if origins = [], the peptide could not be found in the prot.fasta file using the given splice type.
-            if origins == []:
-                continue
-            # if origins contains data, an origin location was found and we must format the data accordingly.
-            else:
-                # call the data configuration function relevant to the splice type.
-                if spliceType == 'Linear':
-                    dataRows = linDataRow(origins, pep, protDict)
-                elif spliceType == 'Cis':
-                    dataRows = cisDataRowNew(origins, pep, protDict)
-                else:
-                    dataRows = transDataRow(origins, pep, protDict)
-                # write the formated data to the row.
-                for protData in dataRows:
-                    writer.writerow(protData)
-            # write a blank row and repeat for the next peptide.
-            writer.writerow([])
-
-def linDataRow(origins, pep, protDict):
-    """
-    Called by writeToFasta, this function takes the linear origin data for a given peptide and formats it for writing
-    to the csv file.
-
-    :param origins: the data structure containing information on where a given peptide was found within the input
-    proteins. Has the form: [('ProtName1', [[location1]]), ('ProtName2', [[location1], [location2]])]
-    :param pep: the peptide which the origin data related to.
-    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
-    peptide and origin due to the program not treating I/J differently.
-    :return:
-    """
-    # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
-    dataRows = []
-    for tuple in origins:
-        # initialise the first column of the row to be the name of the protein.
-        firstHalf = [tuple[0]]
-        # append the peptide as it exist
-        firstHalf.append(pep)
-        # the second element of the tuple stores the location data. For each location found in the current protein,
-        # add the information to the next column of the row.
-        for location in tuple[1]:
-            protPep = protDict[tuple[0]][location[0]:location[1]+1]
-            secondHalf = [protPep, location]
-            dataRow = firstHalf + secondHalf
-            # append dataRow to dataRows
-            dataRows.append(dataRow)
-    # return dataRows to be written to csv.
-    return dataRows
-
-# takes the cis origin data for a given peptide and formats it for writing in a line in the csv
-def cisDataRowNew(origins, pep, protDict):
-    dataRows = []
-    for tuple in origins:
-        dataRow = []
-        protName = tuple[0]
-        locationData = tuple[1]
-        firstHalf = [protName]
-        firstHalf.append(pep)
-        #print(firstHalf)
-        for splitCombo in locationData:
-            split1List = splitCombo[0]
-            split2List = splitCombo[1]
-            for split1 in split1List:
-                for split2 in split2List:
-                    prot = protDict[protName]
-                    # check that they combine in the correct order
-                    # check for a split of len1
-                    if len(split1) == 1:
-                        pepInProt = split1 + prot[split2[0]:split2[1]+1]
-                    elif len(split2) == 1:
-                        pepInProt = prot[split1[0]:split1[1] + 1] + split2
-                    else:
-                        pepInProt = prot[split1[0]:split1[1]+1] + prot[split2[0]:split2[1]+1]
-                    location = str(split1) + ' and ' + str(split2)
-                    secondHalf = [pepInProt]
-                    secondHalf.append(location)
-                    dataRow = firstHalf + secondHalf
-                    dataRows.append(dataRow)
-    return dataRows
-
 def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
     """
+    Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
+    where within the protein list each peptide could have been generated from via trans splicing. Each process it
+    creates outputs a dictionary with the peptides as keys and a list of tuples containing origin peptide names and the
+    splitsLocation data for trans splicing as the value.
+    Data structure summary: transOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
+
     :param protDict: A dictionary containing protein sequences as the key with their origin as the value
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
-    :return transOriginsDict:
-
-    :Data structure summary: transOriginsDict
+    :return:
     """
     numWorkers = multiprocessing.cpu_count()
     toWriteQueue = multiprocessing.Queue()
@@ -508,6 +384,19 @@ def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
     writerProcess.join()
 
 def transOrigin(pep,protDict, minTransLen):
+    """
+    Called as the worker process to the pool in findTransOrigins(), this function takes an individual peptide and a
+    dictionary of protein sequences, and returns the proteins and locations within them from which the peptide could be
+    generated via trans splicing. Once the origin data is compiled, it is added to the toWriteQueue so that it
+    can be processed by the writer() function.
+
+    :param pep: the peptide which the user wishes to find potential linear splicing origins of.
+    :param protDict: a dictionary containing all the input protein sequences.
+    :param minTransLen: the minimum length that a cleavage must be for its location to be reported in the origin data
+    of a trans spliced peptide.
+    :return:
+
+    """
     try:
         # initialise the dictionary
         transOriginDict = {}
@@ -643,6 +532,18 @@ def transOrigin(pep,protDict, minTransLen):
         raise e
 
 def editTransSplits(splits, minTransLen):
+    """
+    Called by transOrigin(), this function takes the splits that could be combined to create the current peptide,
+    and sorts them in the required order for the rest of the algorithm to work. We want the longest split to be first
+    in each pair, and we want the tuple pairs which have both splits with length less than minTransLen to be last
+    in the list.
+    :param splits: a list of tuples, where each tuple is a possible pair of subsequences which could be combined to
+    make the peptide.
+    :param minTransLen: the minimum length that a cleavage must be for its location to be reported in the origin data
+    of a trans spliced peptide.
+    :return splitsNew: splits sorted so that the longest split in each tuple appears first, and the tuples with both
+    splits less than minTransLen at the end of the list.
+    """
     #print(splits)
     splits1 = []
     splits2 = []
@@ -659,7 +560,175 @@ def editTransSplits(splits, minTransLen):
     #print(splitsNew)
     return splitsNew
 
+def processTransInitArgs(toWriteQueue):
+    """
+    Called from findTransOrigins() when the pool is initialised, this function simply gives transOrigin() (the worker
+    function for each process in the pool) access to the toWriteQueue.
+    """
+    transOrigin.toWriteQueue = toWriteQueue
+
+def writer(toWriteQueue, outputPath, spliceType, protDict):
+    """
+    The writer function for linear spliced origin computation. This function simply pulls origin data to be written
+    to file from the toWriteQueue, stores it in the finalLinOriginDict and once all processes are finished, writes
+    the final output csv. finalLinOriginsData structure: { inputPeptide: locationDataStructure }
+    Note that the locationDataStructure differs for trans, linear and cis splicing.
+
+    :param toWriteQueue: the multiprocessing.Queue which the origin data constructed by linearOrigin() is pushed to
+    at the end of each process.
+    :param outputPath: the path of the linear output csv file.
+    :param spliceType: the type of splicing being run in the curent iteration.
+    :param protDict: the dictionary containing all the input proteins, which is required when writing to file.
+    :return:
+    """
+
+    finalLinOriginDict = {}
+
+    while True:
+        linOriginDict = toWriteQueue.get()
+        if linOriginDict == STOP:
+            logging.info("STOPPED writer queue")
+            break
+
+        for key, value in linOriginDict.items():
+            if key in finalLinOriginDict.keys():
+                finalLinOriginDict[key].append(linOriginDict[key])
+            else:
+                finalLinOriginDict[key] = linOriginDict[key]
+    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict)
+
+def writeToFasta(originDict, outputPath, spliceType, protDict):
+    """
+    This function is called by writer(), and takes the ouptut data dictionary and writes it to the filePath given.
+    Also takes the spliceType argument to know how to format the csv and name it.
+
+    :param originDict: the dictionary containing the input peptides as keys and the location data as values. Structure:
+    originDict[peptide] = [(proteinName, locations),(proteinName, locations)...]
+    :param outputPath: the file location and file name to which the output is to be written.
+    :param spliceType: the type of splicing being computed. Each splice type has a different output syntax, and the
+    type of splicing also needs to be added to the output file name.
+    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
+    peptide and origin due to the program not treating I/J differently.
+    :return:
+    """
+    with open(outputPath, 'a', newline='') as csv_file:
+        writer = csv.writer(csv_file, delimiter=',')
+        # write a title with the splice type for the entire document, and a blank row underneath.
+        title = spliceType + ' Peptide Locations'
+        writer.writerow([title])
+        writer.writerow([])
+        # there is a single listing for every unique location/combination that a peptide can come from.
+        # they are listed under the format of the header
+        header = ['Prot Name', 'Peptide', 'Pep in Prot', 'Location']
+        writer.writerow(header)
+        # iterate throught the originDict to write each entry to file.
+        for pep, origins in originDict.items():
+            # if origins = [], the peptide could not be found in the prot.fasta file using the given splice type.
+            if origins == []:
+                continue
+            # if origins contains data, an origin location was found and we must format the data accordingly.
+            else:
+                # call the data configuration function relevant to the splice type.
+                if spliceType == 'Linear':
+                    dataRows = linDataRow(origins, pep, protDict)
+                elif spliceType == 'Cis':
+                    dataRows = cisDataRowNew(origins, pep, protDict)
+                else:
+                    dataRows = transDataRow(origins, pep, protDict)
+                # write the formated data to the row.
+                for protData in dataRows:
+                    writer.writerow(protData)
+            # write a blank row and repeat for the next peptide.
+            writer.writerow([])
+
+def linDataRow(origins, pep, protDict):
+    """
+    Called by writeToFasta, this function takes the linear origin data for a given peptide and formats it for writing
+    to the csv file.
+
+    :param origins: the data structure containing information on where a given peptide was found within the input
+    proteins. Has the form: [('ProtName1', [[location1]]), ('ProtName2', [[location1], [location2]])]
+    :param pep: the peptide which the origin data related to.
+    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
+    peptide and origin due to the program not treating I/J differently.
+    :return dataRows: a list of lists, where each sublist is a row of data which is to be written to file. Each sublist
+    has the format: [protName, peptide, pepInProt, location]:
+    """
+    # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
+    dataRows = []
+    for tuple in origins:
+        # initialise the first column of the row to be the name of the protein.
+        firstHalf = [tuple[0]]
+        # append the peptide as it exist
+        firstHalf.append(pep)
+        # the second element of the tuple stores the location data. For each location found in the current protein,
+        # add the information to the next column of the row.
+        for location in tuple[1]:
+            protPep = protDict[tuple[0]][location[0]:location[1]+1]
+            secondHalf = [protPep, location]
+            dataRow = firstHalf + secondHalf
+            # append dataRow to dataRows
+            dataRows.append(dataRow)
+    # return dataRows to be written to csv.
+    return dataRows
+
+def cisDataRowNew(origins, pep, protDict):
+    """
+    Called by writeToFasta(), this function takes the cis origin data for a given peptide and formats it for writing
+    to the csv file.
+
+    :param origins: the data structure containing information on where a given peptide was found within the input
+    proteins. Has the form:
+    [('ProtName1', [[[b1 location1, b1 location2][y1 location1, y1 location2]],[[b3 location1],[y3 location1, y3 location2]]]), ('ProtName2', ....)]
+    :param pep: the peptide which the origin data related to.
+    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
+    peptide and origin due to the program not treating I/J differently.
+    :return dataRows: a list of lists, where each sublist is a row of data which is to be written to file. Each sublist
+    has the format: [protName, peptide, pepInProt, location]
+    """
+    dataRows = []
+    for tuple in origins:
+        dataRow = []
+        protName = tuple[0]
+        locationData = tuple[1]
+        firstHalf = [protName]
+        firstHalf.append(pep)
+        #print(firstHalf)
+        for splitCombo in locationData:
+            split1List = splitCombo[0]
+            split2List = splitCombo[1]
+            for split1 in split1List:
+                for split2 in split2List:
+                    prot = protDict[protName]
+                    # check that they combine in the correct order
+                    # check for a split of len1
+                    if len(split1) == 1:
+                        pepInProt = split1 + prot[split2[0]:split2[1]+1]
+                    elif len(split2) == 1:
+                        pepInProt = prot[split1[0]:split1[1] + 1] + split2
+                    else:
+                        pepInProt = prot[split1[0]:split1[1]+1] + prot[split2[0]:split2[1]+1]
+                    location = str(split1) + ' and ' + str(split2)
+                    secondHalf = [pepInProt]
+                    secondHalf.append(location)
+                    dataRow = firstHalf + secondHalf
+                    dataRows.append(dataRow)
+    return dataRows
+
 def transDataRow(origins, pep, protDict):
+    """
+    Called by writeToFasta(), this function takes the trans origin data for a given peptide and formats it for writing
+    to the csv file.
+
+    :param origins: the data structure containing information on where a given peptide was found within the input
+    proteins. Has the form: [[protName, startIndex, endIndex]..] where each sublist refers to the location of an
+    individual cleavage which can be combined with another cleavage somewhere in the protein file to create the peptide.
+    :param pep: the peptide which the origin data related to.
+    :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
+    peptide and origin due to the program not treating I/J differently.
+    :return dataRows: a list of lists, where each sublist is a row of data which is to be written to file. Each sublist
+    has the format: [protName, peptide, pepInProt, location]
+    """
     dataRows = []
     for location in origins:
         if location == True:
@@ -673,12 +742,3 @@ def transDataRow(origins, pep, protDict):
             dataRow = [location[0], pep, pepInProt, [startRef + 1, endRef]]
             dataRows.append(dataRow)
     return dataRows
-
-
-def processTransInitArgs(toWriteQueue):
-    transOrigin.toWriteQueue = toWriteQueue
-
-
-def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransLen):
-    protDict = protFastaToDict(proteinFile)
-    generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
