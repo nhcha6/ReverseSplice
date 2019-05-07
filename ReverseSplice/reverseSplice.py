@@ -70,7 +70,6 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, 
     The purpose of this function is to find the aforementioned origins based on the flags passed through and then write
     the output to a Fasta file
     """
-
     if linFlag:
         # Find linear origins
         findLinOrigins(protDict, pepFile, outputPath)
@@ -100,7 +99,7 @@ def findLinOrigins(protDict, pepFile, outputPath):
     outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
-                                initargs=(toWriteQueue,))
+                                initargs=(toWriteQueue,protDict))
 
     writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDict))
     writerProcess.start()
@@ -110,14 +109,14 @@ def findLinOrigins(protDict, pepFile, outputPath):
         for record in SeqIO.parse(handle, 'fasta'):
             pep = str(record.seq)
             logging.info('Process started for: ' + str(pep))
-            pool.apply_async(linearOrigin, args=(pep, protDict))
+            pool.apply_async(linearOrigin, args=(pep,))
         pool.close()
         pool.join()
     logging.info("Pool joined")
     toWriteQueue.put(STOP)
     writerProcess.join()
 
-def linearOrigin(pep, protDict):
+def linearOrigin(pep):
     """
     Called as the worker function to the pool in findLinOrigins(), this function takes an individual peptide and a
     dictionary of protein sequences, and returns the proteins and locations within from which the peptide could be
@@ -129,11 +128,13 @@ def linearOrigin(pep, protDict):
     :return:
     """
     try:
+
+        print(pep)
         linOriginDict = {}
         # initialise the key as an empty list in the outputDict
         linOriginDict[pep] = []
         # iterate through each protSeq in the keys of protDict
-        for key, value in protDict.items():
+        for key, value in proteinDict.items():
 
             # initialise the locations holder
             locations = []
@@ -172,13 +173,15 @@ def linearOrigin(pep, protDict):
 
         raise e
 
-def processLinInitArgs(toWriteQueue):
+def processLinInitArgs(toWriteQueue, protDict):
     """
     Called from findLinOrigins() when the pool is initialised, this function simply gives linearOrigin() (the worker
     function for each process in the pool) access to the toWriteQueue.
     """
 
     linearOrigin.toWriteQueue = toWriteQueue
+    global proteinDict
+    proteinDict = protDict
 
 def findCisOrigins(protDict, pepFile, outputPath):
     """
