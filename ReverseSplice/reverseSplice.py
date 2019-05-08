@@ -37,8 +37,8 @@ def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, trans
     for a trans spliced peptide.
     :return:
     """
-    protDict = protFastaToDict(proteinFile)
-    generateOrigins(protDict, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
+    protDictList = protFastaToDict(proteinFile)
+    generateOrigins(protDictList, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
 
 def protFastaToDict(protFile):
     """
@@ -47,6 +47,7 @@ def protFastaToDict(protFile):
     :param protFile: A Fasta file path (containing all the proteins which could serve as an origin location)
     :return protDict: A dictionary which contains a protein sequence as the key, and the protein name as the value.
     """
+    protDictList = []
     protDict = {}
     with open(protFile, "rU") as handle:
         counter = 1
@@ -54,10 +55,13 @@ def protFastaToDict(protFile):
             seq = str(record.seq)
             name = 'rec' + str(counter)
             protDict[name] = seq
+            if counter == 10000000:
+                protDictList.append(protDict)
+                protDict = {}
             counter+=1
-    return protDict
+    return protDictList
 
-def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
+def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
     """
     Called by generateOutput(), this function controls the calling of a separate function for linear, cis and trans
     splicing.
@@ -74,15 +78,15 @@ def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, 
     """
     if linFlag:
         # Find linear origins
-        findLinOrigins(protDict, pepFile, outputPath)
+        findLinOrigins(protDictList, pepFile, outputPath)
     if cisFlag:
         # Find cis origins
-        findCisOrigins(protDict, pepFile, outputPath)
+        findCisOrigins(protDictList, pepFile, outputPath)
     if transFlag:
         # Find trans origins > work in progress
-        findTransOrigins(protDict, pepFile, outputPath, minTransLen)
+        findTransOrigins(protDictList, pepFile, outputPath, minTransLen)
 
-def findLinOrigins(protDict, pepFile, outputPath):
+def findLinOrigins(protDictList, pepFile, outputPath):
     """
     Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
     where within the protein list each peptide could have been generated from via linear splicing. Each process it
@@ -96,27 +100,28 @@ def findLinOrigins(protDict, pepFile, outputPath):
                             from in the relevant origin protein.
     :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
     """
-    numWorkers = multiprocessing.cpu_count()
-    toWriteQueue = multiprocessing.Queue()
-    outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+    for protDict in protDictList:
+        numWorkers = multiprocessing.cpu_count()
+        toWriteQueue = multiprocessing.Queue()
+        outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
-    pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
-                                initargs=(toWriteQueue,protDict))
+        pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
+                                    initargs=(toWriteQueue,protDict))
 
-    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDict))
-    writerProcess.start()
+        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDict))
+        writerProcess.start()
 
-    # iterate through each peptide
-    with open(pepFile, "rU") as handle:
-        for record in SeqIO.parse(handle, 'fasta'):
-            pep = str(record.seq)
-            logging.info('Process started for: ' + str(pep))
-            pool.apply_async(linearOrigin, args=(pep,))
+        # iterate through each peptide for each split up of the input
+        with open(pepFile, "rU") as handle:
+            for record in SeqIO.parse(handle, 'fasta'):
+                pep = str(record.seq)
+                logging.info('Process started for: ' + str(pep))
+                pool.apply_async(linearOrigin, args=(pep,))
         pool.close()
         pool.join()
-    logging.info("Pool joined")
-    toWriteQueue.put(STOP)
-    writerProcess.join()
+        logging.info("Pool joined")
+        toWriteQueue.put(STOP)
+        writerProcess.join()
 
 def linearOrigin(pep):
     """
