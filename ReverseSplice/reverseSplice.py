@@ -55,10 +55,11 @@ def protFastaToDict(protFile):
             seq = str(record.seq)
             name = 'rec' + str(counter)
             protDict[name] = seq
-            if counter == 10000000:
+            if counter%2 == 0:
                 protDictList.append(protDict)
                 protDict = {}
             counter+=1
+        protDictList.append(protDict)
     return protDictList
 
 def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
@@ -100,10 +101,11 @@ def findLinOrigins(protDictList, pepFile, outputPath):
                             from in the relevant origin protein.
     :Data structure summary: linOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
     """
+    outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+
     for protDict in protDictList:
         numWorkers = multiprocessing.cpu_count()
         toWriteQueue = multiprocessing.Queue()
-        outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
         pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
                                     initargs=(toWriteQueue,protDict))
