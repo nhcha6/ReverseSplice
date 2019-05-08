@@ -49,10 +49,12 @@ def protFastaToDict(protFile):
     """
     protDict = {}
     with open(protFile, "rU") as handle:
+        counter = 1
         for record in SeqIO.parse(handle, 'fasta'):
             seq = str(record.seq)
-            name = str(record.name).split('|')[1]
+            name = 'rec' + str(counter)
             protDict[name] = seq
+            counter+=1
     return protDict
 
 def generateOrigins(protDict, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
