@@ -58,7 +58,8 @@ def protFastaToDict(protFile):
                 protDictList.append(protDict)
                 protDict = {}
             counter+=1
-        protDictList.append(protDict)
+        if protDict:
+            protDictList.append(protDict)
     return protDictList
 
 def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen):
@@ -248,7 +249,6 @@ def cisOrigin(pep, protDict, overlapFlag):
     """
     try:
 
-        linFlag = False
         cisOriginDict = {}
 
         # initialise that key in the dictionary
@@ -265,7 +265,9 @@ def cisOrigin(pep, protDict, overlapFlag):
             alteredProt = protSeq.replace('I', 'L')
             # change the linFlag if the pep exists as a linear peptide somewhere in the input
             if alteredPep in alteredProt:
-                linFlag = True
+                cisOriginDict[pep] = []
+                cisOrigin.toWriteQueue.put(cisOriginDict)
+                return
             # find the location data corresponding the current protSeq.
             locations = findCisIndexes(cisSplits, alteredProt, overlapFlag)
             # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
@@ -275,8 +277,6 @@ def cisOrigin(pep, protDict, overlapFlag):
             # if it is possible to create the peptide using cis splicing from the current protein, add the protName
             # and locations tuple to cisOriginsDict
             cisOriginDict[pep].append((protName, locations))
-        if linFlag:
-            cisOrigin.toWriteQueue.put({})
         else:
             cisOrigin.toWriteQueue.put(cisOriginDict)
         logging.info('Cis Process complete for: ' + str(pep))
