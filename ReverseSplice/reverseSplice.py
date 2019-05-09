@@ -111,7 +111,7 @@ def findLinOrigins(protDictList, pepFile, outputPath):
     toWriteQueue = multiprocessing.Queue()
 
     pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
-                                initargs=(toWriteQueue,protDictList))
+                                initargs=(toWriteQueue, protDictList))
 
     writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDictList))
     writerProcess.start()
@@ -140,11 +140,10 @@ def linearOrigin(pep):
     :return:
     """
     try:
+        linOriginDict = {}
+        # initialise the key as an empty list in the outputDict
+        linOriginDict[pep] = []
         for proteinDict in protDictList:
-            print(pep)
-            linOriginDict = {}
-            # initialise the key as an empty list in the outputDict
-            linOriginDict[pep] = []
             # iterate through each protSeq in the keys of protDict
             for key, value in proteinDict.items():
 
@@ -166,8 +165,8 @@ def linearOrigin(pep):
                 if locations:
                     # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
                     linOriginDict[pep].append((key, locations))
-            linearOrigin.toWriteQueue.put(linOriginDict)
-            logging.info('Process complete for: ' + str(pep))
+        linearOrigin.toWriteQueue.put(linOriginDict)
+        logging.info('Process complete for: ' + str(pep))
 
     except Exception as e:
 
@@ -736,7 +735,6 @@ def linDataRow(origins, pep, protDict):
     """
     # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
     dataRows = []
-    print(origins)
     for tuple in origins:
         # initialise the first column of the row to be the name of the protein.
         firstHalf = [tuple[0]]
