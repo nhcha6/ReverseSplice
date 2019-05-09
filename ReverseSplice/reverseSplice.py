@@ -12,11 +12,8 @@ import traceback
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-# Define maxLen
-maxLen = 20
+PROT_THRESH = 2
 STOP = "STOP"
-
-#LTLWTGNN
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransLen):
     """
@@ -45,7 +42,8 @@ def protFastaToDict(protFile):
     Called by generateOutput(), this function stores all the sequences in a fasta file in a dictionary.
 
     :param protFile: A Fasta file path (containing all the proteins which could serve as an origin location)
-    :return protDict: A dictionary which contains a protein sequence as the key, and the protein name as the value.
+    :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
+    value. The list is creates to ensure the dictionary is small enough to be passed into the pool as a global variable.
     """
     protDictList = []
     protDict = {}
@@ -55,7 +53,7 @@ def protFastaToDict(protFile):
             seq = str(record.seq)
             name = 'rec' + str(counter)
             protDict[name] = seq
-            if counter%2 == 0:
+            if counter % PROT_THRESH == 0:
                 protDictList.append(protDict)
                 protDict = {}
             counter+=1
@@ -67,7 +65,8 @@ def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFl
     Called by generateOutput(), this function controls the calling of a separate function for linear, cis and trans
     splicing.
 
-    :param protData: A dictionary containing protein sequences as the key with their origin as the value
+    :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
+    value.
     :param pepFile: A file with a list of peptides that you want to find the origin locations for
     :param outputPath: Where you want to store the output file
     :param linFlag: Boolean flag to determine checking for linear peptides
@@ -94,7 +93,8 @@ def findLinOrigins(protDictList, pepFile, outputPath):
     creates outputs a dictionary with the peptides as keys and a list of tuples containing origin peptide names and the
     splitsLocation data for linear splicing as the value.
 
-    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
+    :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
+    value.
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return linOriginsDict: Has the peptide as a key and a list of tuples of the form (originProtName, locations).
                             Locations store information on where the corresponding peptide could have been generated
@@ -133,7 +133,7 @@ def linearOrigin(pep):
     can be processed by the linearWriter() function.
 
     :param pep: the peptide which the user wishes to find potential linear splicing origins of.
-    :param protDict: a dictionary containing all the input protein sequences.
+    :param protDict: a dictionary containing a portion (possibly all) of the input protein sequences.
     :return:
     """
     try:
@@ -201,7 +201,8 @@ def findCisOrigins(protDictList, pepFile, outputPath):
 
     Data structure summary: cisOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
 
-    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
+    :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
+    value.
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return:
     """
@@ -368,7 +369,8 @@ def findTransOrigins(protDictList, pepFile, outputPath, minTransLen):
     splitsLocation data for trans splicing as the value.
     Data structure summary: transOriginsDict[peptide] = [(proteinName, locations),(proteinName, locations)]
 
-    :param protDict: A dictionary containing protein sequences as the key with their origin as the value
+    :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
+    value.
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return:
     """
@@ -589,7 +591,7 @@ def writer(toWriteQueue, outputPath, spliceType, protDict):
     :param toWriteQueue: the multiprocessing.Queue which the origin data constructed by linearOrigin() is pushed to
     at the end of each process.
     :param outputPath: the path of the linear output csv file.
-    :param spliceType: the type of splicing being run in the curent iteration.
+    :param spliceType: the type of splicing being run in the current iteration.
     :param protDict: the dictionary containing all the input proteins, which is required when writing to file.
     :return:
     """
