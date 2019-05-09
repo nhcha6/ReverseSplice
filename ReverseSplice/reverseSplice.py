@@ -192,7 +192,7 @@ def processLinInitArgs(toWriteQueue, protDict):
     global proteinDict
     proteinDict = protDict
 
-def findCisOrigins(protDict, pepFile, outputPath):
+def findCisOrigins(protDictList, pepFile, outputPath):
     """
     Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
     where within the protein list each peptide could have been generated from via cis splicing. Each process it
@@ -205,28 +205,27 @@ def findCisOrigins(protDict, pepFile, outputPath):
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return:
     """
-    cisOriginDict = {}
     outputPath = outputPath + '_' + 'Cis' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+    for protDict in protDictList:
+        numWorkers = multiprocessing.cpu_count()
+        toWriteQueue = multiprocessing.Queue()
+        pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
+                                    initargs=(toWriteQueue,))
+        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict))
+        writerProcess.start()
 
-    numWorkers = multiprocessing.cpu_count()
-    toWriteQueue = multiprocessing.Queue()
-    pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
-                                initargs=(toWriteQueue,))
-    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict))
-    writerProcess.start()
+        # iterate through each pep in pepList
+        with open(pepFile, "rU") as handle:
+            for record in SeqIO.parse(handle, 'fasta'):
+                pep = str(record.seq)
+                logging.info('Cis Process started for: ' + str(pep))
 
-    # iterate through each pep in pepList
-    with open(pepFile, "rU") as handle:
-        for record in SeqIO.parse(handle, 'fasta'):
-            pep = str(record.seq)
-            logging.info('Cis Process started for: ' + str(pep))
-
-            pool.apply_async(cisOrigin, args=(pep, protDict))
-        pool.close()
-        pool.join()
-    logging.info("Pool joined")
-    toWriteQueue.put(STOP)
-    writerProcess.join()
+                pool.apply_async(cisOrigin, args=(pep, protDict))
+            pool.close()
+            pool.join()
+        logging.info("Pool joined")
+        toWriteQueue.put(STOP)
+        writerProcess.join()
 
 def cisOrigin(pep, protDict):
     """
@@ -361,7 +360,7 @@ def findCisIndexes(cisSplits, protSeq):
         totalLocations.append(splitLocations)
     return totalLocations
 
-def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
+def findTransOrigins(protDictList, pepFile, outputPath, minTransLen):
     """
     Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
     where within the protein list each peptide could have been generated from via trans splicing. Each process it
@@ -373,27 +372,28 @@ def findTransOrigins(protDict, pepFile, outputPath, minTransLen):
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
     :return:
     """
-    numWorkers = multiprocessing.cpu_count()
-    toWriteQueue = multiprocessing.Queue()
     outputPath = outputPath + '_' + 'Trans' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
+    for protDict in protDictList:
+        numWorkers = multiprocessing.cpu_count()
+        toWriteQueue = multiprocessing.Queue()
 
-    pool = multiprocessing.Pool(processes=numWorkers, initializer=processTransInitArgs,
-                                initargs=(toWriteQueue,))
+        pool = multiprocessing.Pool(processes=numWorkers, initializer=processTransInitArgs,
+                                    initargs=(toWriteQueue,))
 
-    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Trans', protDict))
-    writerProcess.start()
+        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Trans', protDict))
+        writerProcess.start()
 
-    # iterate through each peptide
-    with open(pepFile, "rU") as handle:
-        for record in SeqIO.parse(handle, 'fasta'):
-            pep = str(record.seq)
-            logging.info('Process started for: ' + str(pep))
-            pool.apply_async(transOrigin, args=(pep, protDict, minTransLen))
-        pool.close()
-        pool.join()
-    logging.info("Pool joined")
-    toWriteQueue.put(STOP)
-    writerProcess.join()
+        # iterate through each peptide
+        with open(pepFile, "rU") as handle:
+            for record in SeqIO.parse(handle, 'fasta'):
+                pep = str(record.seq)
+                logging.info('Process started for: ' + str(pep))
+                pool.apply_async(transOrigin, args=(pep, protDict, minTransLen))
+            pool.close()
+            pool.join()
+        logging.info("Pool joined")
+        toWriteQueue.put(STOP)
+        writerProcess.join()
 
 def transOrigin(pep,protDict, minTransLen):
     """
