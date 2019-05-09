@@ -347,17 +347,30 @@ def findCisIndexes(cisSplits, protSeq):
         # append the location of any split2 occurences in protSeq to splitLoc2
         for x in re.finditer(split2, protSeq):
             splitLoc2.append([x.start(), x.end() - 1])
-        # if either of the splitLocs are empty, the peptide cannot be formed using this split combo from the given
-        # protSeq. Thus continue if either are empty.
-        if splitLoc1 == [] or splitLoc2 == []:
-            continue
+
         # if both splits exist, we check if the length of either of the splits is 1. If so, there are likely to be heaos
         # of locations where this split exists. Thus, if the length is 1 we change the location to be simply the amino
         # acid instead of all the positions it is located at within the peptide.
         if len(split1) == 1:
-            splitLoc1 = split1
+            # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
+            # satisfied when converting split1 to just hold the amino acid.
+            if True:
+                splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1)
+            else:
+                splitLoc1 = split1
         if len(split2) == 1:
-            splitLoc2 = split2
+            # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
+            # satisfied when converting split1 to just hold the amino acid.
+            if True:
+                splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2)
+            else:
+                splitLoc2 = split2
+
+        # if either of the splitLocs are empty, the peptide cannot be formed using this split combo from the given
+        # protSeq. Thus continue if either are empty.
+        if splitLoc1 == [] or splitLoc2 == []:
+            continue
+
         # we append all the stored up location data of split1 and split2 to the splitLocations list, which
         # stores data relevant only to the specific combnation of splits in question. We then append
         # this list to the totalLocations list which stores all the location data across all potential split combinations.
@@ -365,6 +378,24 @@ def findCisIndexes(cisSplits, protSeq):
         splitLocations.append(splitLoc2)
         totalLocations.append(splitLocations)
     return totalLocations
+
+def editSingleAmino(splitLoc1, splitLoc2, split1):
+    # must then check that if the user has selected not to produce overlapped peptides, that at least one
+    # of the aminoacids is found outside the locations in splitLoc1
+    toDelete = []
+    i = 0
+    for loc2 in splitLoc2:
+        onlyOverlap = True
+        for loc1 in splitLoc1:
+            if not overlapCheck(loc1, loc2):
+                onlyOverlap = False
+        if onlyOverlap:
+            toDelete.append(i)
+        i+=1
+    toDelete.reverse()
+    for j in toDelete:
+        del splitLoc2[j]
+    return split1, splitLoc2
 
 def findTransOrigins(protDictList, pepFile, outputPath, minTransLen):
     """
