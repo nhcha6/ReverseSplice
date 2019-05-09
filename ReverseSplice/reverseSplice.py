@@ -465,6 +465,12 @@ def transOrigin(pep,protDict, minTransLen):
                 # replace all Is with Js as they are indeciferable on mass spec.
                 alteredProt = protSeq.replace('I', 'L')
 
+                # check for the presence of split1 and split2 in the same protSeq. If both exist, it is a cis or lin
+                # peptide so should be ignored from the trans output.
+                if split1 in alteredProt and split2 in alteredProt:
+                    transOrigin.toWriteQueue.put(transOriginDict)
+                    return
+
                 # check for presence of split1 in the current protein
                 # if splitLoc1 == True, we know that this split has been found and we can
                 # continue through without checking the current protein for it.
