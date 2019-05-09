@@ -81,7 +81,7 @@ class Example(QWidget):
 
         self.generateOutput = QPushButton('Generate Output')
         self.generateOutput.setEnabled(False)
-        self.grid.addWidget(self.generateOutput, 8, 1)
+        self.grid.addWidget(self.generateOutput, 9, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
         self.linCheckbox = QCheckBox('Linear')
@@ -90,9 +90,12 @@ class Example(QWidget):
         self.cisCheckbox = QCheckBox('Cis')
         self.cisCheckbox.setEnabled(False)
         self.cisCheckbox.stateChanged.connect(self.enableOutput)
+        self.cisCheckbox.stateChanged.connect(self.enableOverlap)
         self.transCheckbox = QCheckBox('Trans')
         self.transCheckbox.setEnabled(False)
         self.transCheckbox.stateChanged.connect(self.enableOutput)
+        self.overlapCheckbox = QCheckBox('Cis Overlap Off')
+        self.overlapCheckbox.setEnabled(False)
         self.minTransLen = QComboBox()
         self.minTransLabel = QLabel("Min Trans Cleavage Length:")
         for i in range(2,9):
@@ -102,8 +105,9 @@ class Example(QWidget):
         self.grid.addWidget(self.linCheckbox, 3, 1)
         self.grid.addWidget(self.cisCheckbox, 4, 1)
         self.grid.addWidget(self.transCheckbox, 5, 1)
-        self.grid.addWidget(self.minTransLen, 7, 1)
-        self.grid.addWidget(self.minTransLabel, 6, 1)
+        self.grid.addWidget(self.overlapCheckbox, 6,1)
+        self.grid.addWidget(self.minTransLen, 8, 1)
+        self.grid.addWidget(self.minTransLabel, 7, 1)
 
     def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
@@ -225,11 +229,11 @@ class Example(QWidget):
         outputFile = self.outputPath + '/' + self.fileName.text()
         print(outputFile)
         self.outputGen = OutputGenerator(self.createOutput, outputFile, self.proteinFile, self.peptideFile, self.linFlag,
-                                         self.cisFlag, self.transFlag, int(self.minTransLength))
+                                         self.cisFlag, self.transFlag, self.overlapFlag, int(self.minTransLength))
         self.outputGen.signals.finished.connect(self.outputFinished)
         self.threadpool.start(self.outputGen)
         self.outputLabel = QLabel("Generating Output. Please Wait!")
-        self.grid.addWidget(self.outputLabel, 9, 1)
+        self.grid.addWidget(self.outputLabel, 10, 1)
         # close the output name box.
         self.outputNameBox.close()
 
@@ -243,6 +247,7 @@ class Example(QWidget):
             self.linFlag = self.linCheckbox.isChecked()
             self.cisFlag = self.cisCheckbox.isChecked()
             self.transFlag = self.transCheckbox.isChecked()
+            self.overlapFlag = self.overlapCheckbox.isChecked()
             self.minTransLength = self.minTransLen.currentText()
 
             reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
@@ -250,7 +255,8 @@ class Example(QWidget):
                                                             'Protein File: ' + self.proteinFile + '\n' + '\n' +
                                                             'Peptide File: ' + self.peptideFile + '\n' + '\n' +
                                                             'Min Cleavage Length: ' + self.minTransLength + '\n' +
-                                                            'Linear: ' + str(self.linFlag) + ', Cis: ' + str(self.cisFlag) + ', Trans: ' + str(self.transFlag))
+                                                            'Linear: ' + str(self.linFlag) + ', Cis: ' + str(self.cisFlag) + ', Trans: ' + str(self.transFlag) + '\n' +
+                                                            'Overlap Off: ' + str(self.overlapFlag))
 
             if reply == QMessageBox.Yes:
                 self.getOutputPath()
@@ -267,8 +273,14 @@ class Example(QWidget):
         else:
             self.generateOutput.setEnabled(False)
 
-    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransFlag):
-        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransFlag)
+    def enableOverlap(self):
+        if self.cisCheckbox.isChecked():
+            self.overlapCheckbox.setEnabled(True)
+        else:
+            self.overlapCheckbox.setEnabled(False)
+
+    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransFlag):
+        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransFlag)
 
     def outputFinished(self):
         QMessageBox.about(self, "Message", "All done!")

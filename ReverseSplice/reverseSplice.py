@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 PROT_THRESH = 2
 STOP = "STOP"
 
-def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, minTransLen):
+def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransLen):
     """
     Called from Example.createOutput() in reverseSpliceGUI.py, this function recieves the input parameters from the
     GUI code, creates the protein dictionary from the input path and then calls generateOrigins to begin the
@@ -30,12 +30,13 @@ def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, trans
     generated from via cis splicing.
     :param transFlag: True if the user wishes to return a file with information on where each peptide could have been
     generated from via trans splicing.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :param minTransLen: the minimum length a cleavage must be for it to be reported in the output file as an origin
     for a trans spliced peptide.
     :return:
     """
     protDictList = protFastaToDict(proteinFile)
-    generateOrigins(protDictList, peptideFile, outputPath, linFlag, cisFlag, transFlag, minTransLen)
+    generateOrigins(protDictList, peptideFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen)
 
 def protFastaToDict(protFile):
     """
@@ -60,7 +61,7 @@ def protFastaToDict(protFile):
         protDictList.append(protDict)
     return protDictList
 
-def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, minTransLen):
+def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen):
     """
     Called by generateOutput(), this function controls the calling of a separate function for linear, cis and trans
     splicing.
@@ -72,6 +73,9 @@ def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFl
     :param linFlag: Boolean flag to determine checking for linear peptides
     :param cisFlag: Boolean flag to determine checking for cis peptides
     :param transFlag: Boolean flag to determine checking for trans peptides
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param minTransLen: the minimum length a cleavage must be for it to be reported in the output file as an origin
+    for a trans spliced peptide.
 
     The purpose of this function is to find the aforementioned origins based on the flags passed through and then write
     the output to a Fasta file
@@ -81,7 +85,7 @@ def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFl
         findLinOrigins(protDictList, pepFile, outputPath)
     if cisFlag:
         # Find cis origins
-        findCisOrigins(protDictList, pepFile, outputPath)
+        findCisOrigins(protDictList, pepFile, outputPath, overlapFlag)
     if transFlag:
         # Find trans origins > work in progress
         findTransOrigins(protDictList, pepFile, outputPath, minTransLen)
@@ -192,7 +196,7 @@ def processLinInitArgs(toWriteQueue, protDict):
     global proteinDict
     proteinDict = protDict
 
-def findCisOrigins(protDictList, pepFile, outputPath):
+def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
     """
     Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
     where within the protein list each peptide could have been generated from via cis splicing. Each process it
@@ -203,7 +207,9 @@ def findCisOrigins(protDictList, pepFile, outputPath):
 
     :return protDictList: A list of dictionaries which contain a protein sequence as the key, and the protein name as the
     value.
-    :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for
+    :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for.
+    :param outputPath: the location and name of the output file as selected by the user.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return:
     """
     outputPath = outputPath + '_' + 'Cis' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
@@ -212,7 +218,7 @@ def findCisOrigins(protDictList, pepFile, outputPath):
         toWriteQueue = multiprocessing.Queue()
         pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
                                     initargs=(toWriteQueue,))
-        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict))
+        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict, overlapFlag))
         writerProcess.start()
 
         # iterate through each pep in pepList
@@ -221,14 +227,14 @@ def findCisOrigins(protDictList, pepFile, outputPath):
                 pep = str(record.seq)
                 logging.info('Cis Process started for: ' + str(pep))
 
-                pool.apply_async(cisOrigin, args=(pep, protDict))
+                pool.apply_async(cisOrigin, args=(pep, protDict, overlapFlag))
             pool.close()
             pool.join()
         logging.info("Pool joined")
         toWriteQueue.put(STOP)
         writerProcess.join()
 
-def cisOrigin(pep, protDict):
+def cisOrigin(pep, protDict, overlapFlag):
     """
     Called as the worker process to the pool in findCisOrigins(), this function takes an individual peptide and a
     dictionary of protein sequences, and returns the proteins and locations within them from which the peptide could be
@@ -237,6 +243,7 @@ def cisOrigin(pep, protDict):
 
     :param pep: the peptide which the user wishes to find potential linear splicing origins of.
     :param protDict: a dictionary containing all the input protein sequences.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return:
     """
     try:
@@ -260,7 +267,7 @@ def cisOrigin(pep, protDict):
             if alteredPep in alteredProt:
                 linFlag = True
             # find the location data corresponding the current protSeq.
-            locations = findCisIndexes(cisSplits, alteredProt)
+            locations = findCisIndexes(cisSplits, alteredProt, overlapFlag)
             # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
             # If so, continue.
             if locations == []:
@@ -316,7 +323,7 @@ def findSplits(pep):
         cisSplits.append((split1,split2))
     return cisSplits
 
-def findCisIndexes(cisSplits, protSeq):
+def findCisIndexes(cisSplits, protSeq, overlapFlag):
     """
     Called by cisOrigins(), this function returns the location data of where different pairs of cisSplits (which
     combine to form a given peptide) exist in a protein sequence. The output data structure is a series of embedded
@@ -330,6 +337,7 @@ def findCisIndexes(cisSplits, protSeq):
     splicing.
     :param protSeq: the proteins sequence within which these pairs are being searched for. If both pairs are found,
     the location data of where they were found within the protein is added to the data structure described above.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return:
     """
     totalLocations = []
@@ -354,14 +362,14 @@ def findCisIndexes(cisSplits, protSeq):
         if len(split1) == 1:
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
-            if True:
+            if overlapFlag:
                 splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1)
             else:
                 splitLoc1 = split1
         if len(split2) == 1:
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
-            if True:
+            if overlapFlag:
                 splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2)
             else:
                 splitLoc2 = split2
@@ -634,7 +642,7 @@ def processTransInitArgs(toWriteQueue):
     """
     transOrigin.toWriteQueue = toWriteQueue
 
-def writer(toWriteQueue, outputPath, spliceType, protDict):
+def writer(toWriteQueue, outputPath, spliceType, protDict, overlapFlag = None):
     """
     The writer function for linear spliced origin computation. This function simply pulls origin data to be written
     to file from the toWriteQueue, stores it in the finalLinOriginDict and once all processes are finished, writes
@@ -646,6 +654,7 @@ def writer(toWriteQueue, outputPath, spliceType, protDict):
     :param outputPath: the path of the linear output csv file.
     :param spliceType: the type of splicing being run in the current iteration.
     :param protDict: the dictionary containing all the input proteins, which is required when writing to file.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return:
     """
 
@@ -662,9 +671,9 @@ def writer(toWriteQueue, outputPath, spliceType, protDict):
                 finalLinOriginDict[key].append(linOriginDict[key])
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
-    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict)
+    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict, overlapFlag)
 
-def writeToFasta(originDict, outputPath, spliceType, protDict):
+def writeToFasta(originDict, outputPath, spliceType, protDict, overlapFlag):
     """
     This function is called by writer(), and takes the ouptut data dictionary and writes it to the filePath given.
     Also takes the spliceType argument to know how to format the csv and name it.
@@ -676,6 +685,7 @@ def writeToFasta(originDict, outputPath, spliceType, protDict):
     type of splicing also needs to be added to the output file name.
     :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
     peptide and origin due to the program not treating I/J differently.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return:
     """
     with open(outputPath, 'a', newline='') as csv_file:
@@ -699,7 +709,7 @@ def writeToFasta(originDict, outputPath, spliceType, protDict):
                 if spliceType == 'Linear':
                     dataRows = linDataRow(origins, pep, protDict)
                 elif spliceType == 'Cis':
-                    dataRows = cisDataRowNew(origins, pep, protDict)
+                    dataRows = cisDataRowNew(origins, pep, protDict, overlapFlag)
                 else:
                     dataRows = transDataRow(origins, pep, protDict)
                 # write the formated data to the row.
@@ -739,7 +749,7 @@ def linDataRow(origins, pep, protDict):
     # return dataRows to be written to csv.
     return dataRows
 
-def cisDataRowNew(origins, pep, protDict):
+def cisDataRowNew(origins, pep, protDict, overlapFlag):
     """
     Called by writeToFasta(), this function takes the cis origin data for a given peptide and formats it for writing
     to the csv file.
@@ -750,6 +760,7 @@ def cisDataRowNew(origins, pep, protDict):
     :param pep: the peptide which the origin data related to.
     :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
     peptide and origin due to the program not treating I/J differently.
+    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :return dataRows: a list of lists, where each sublist is a row of data which is to be written to file. Each sublist
     has the format: [protName, peptide, pepInProt, location]
     """
@@ -767,8 +778,9 @@ def cisDataRowNew(origins, pep, protDict):
             for split1 in split1List:
                 for split2 in split2List:
                     # check for overlap between the splits if user has prescribed no overlap
-                    if overlapCheck(split1, split2):
-                        continue
+                    if overlapFlag:
+                        if overlapCheck(split1, split2):
+                            continue
                     prot = protDict[protName]
                     # check that they combine in the correct order
                     # check for a split of len1
