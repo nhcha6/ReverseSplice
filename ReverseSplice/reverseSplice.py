@@ -107,27 +107,26 @@ def findLinOrigins(protDictList, pepFile, outputPath):
     """
     outputPath = outputPath + '_' + 'Linear' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
 
-    for protDict in protDictList:
-        numWorkers = multiprocessing.cpu_count()
-        toWriteQueue = multiprocessing.Queue()
+    numWorkers = multiprocessing.cpu_count()
+    toWriteQueue = multiprocessing.Queue()
 
-        pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
-                                    initargs=(toWriteQueue,protDict))
+    pool = multiprocessing.Pool(processes=numWorkers, initializer=processLinInitArgs,
+                                initargs=(toWriteQueue,protDictList))
 
-        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDict))
-        writerProcess.start()
+    writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Linear', protDictList))
+    writerProcess.start()
 
-        # iterate through each peptide for each split up of the input
-        with open(pepFile, "rU") as handle:
-            for record in SeqIO.parse(handle, 'fasta'):
-                pep = str(record.seq)
-                logging.info('Process started for: ' + str(pep))
-                pool.apply_async(linearOrigin, args=(pep,))
-        pool.close()
-        pool.join()
-        logging.info("Pool joined")
-        toWriteQueue.put(STOP)
-        writerProcess.join()
+    # iterate through each peptide for each split up of the input
+    with open(pepFile, "rU") as handle:
+        for record in SeqIO.parse(handle, 'fasta'):
+            pep = str(record.seq)
+            logging.info('Process started for: ' + str(pep))
+            pool.apply_async(linearOrigin, args=(pep,))
+    pool.close()
+    pool.join()
+    logging.info("Pool joined")
+    toWriteQueue.put(STOP)
+    writerProcess.join()
 
 def linearOrigin(pep):
     """
@@ -141,34 +140,34 @@ def linearOrigin(pep):
     :return:
     """
     try:
+        for proteinDict in protDictList:
+            print(pep)
+            linOriginDict = {}
+            # initialise the key as an empty list in the outputDict
+            linOriginDict[pep] = []
+            # iterate through each protSeq in the keys of protDict
+            for key, value in proteinDict.items():
 
-        print(pep)
-        linOriginDict = {}
-        # initialise the key as an empty list in the outputDict
-        linOriginDict[pep] = []
-        # iterate through each protSeq in the keys of protDict
-        for key, value in proteinDict.items():
-
-            # initialise the locations holder
-            locations = []
-            # change the Is to Ls for both the pep and prot, as they have identical masses and
-            # are indeciferable on mass spec.
-            alteredPep = pep.replace('I', 'L')
-            alteredProt = value.replace('I', 'L')
-            # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
-            # of the substring in the string. The iterator is empty if the susbset does not appear at all.
-            # We thus iterate through all instances of the subset and append it to a list of locations.
-            for x in re.finditer(alteredPep, alteredProt):
-                # convert the start index and end index to a list of indexes and then append to locations
-                # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
-                locations.append([x.start(), x.end() - 1])
-            # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
-            # iterating through proteins.
-            if locations:
-                # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
-                linOriginDict[pep].append((key, locations))
-        linearOrigin.toWriteQueue.put(linOriginDict)
-        logging.info('Process complete for: ' + str(pep))
+                # initialise the locations holder
+                locations = []
+                # change the Is to Ls for both the pep and prot, as they have identical masses and
+                # are indeciferable on mass spec.
+                alteredPep = pep.replace('I', 'L')
+                alteredProt = value.replace('I', 'L')
+                # re.finditer(substring, string) returns an iterable with the start and finish indices of all the locations
+                # of the substring in the string. The iterator is empty if the susbset does not appear at all.
+                # We thus iterate through all instances of the subset and append it to a list of locations.
+                for x in re.finditer(alteredPep, alteredProt):
+                    # convert the start index and end index to a list of indexes and then append to locations
+                    # locations structure is a list of lists: [[1,2,3,4],[5,6,7,8]]
+                    locations.append([x.start(), x.end() - 1])
+                # if nothing is added to locations, it means that the peptide was not found in the protein, and we continue
+                # iterating through proteins.
+                if locations:
+                    # otherwise if we have added to locations, we append the protName/location tup to linOriginDict
+                    linOriginDict[pep].append((key, locations))
+            linearOrigin.toWriteQueue.put(linOriginDict)
+            logging.info('Process complete for: ' + str(pep))
 
     except Exception as e:
 
@@ -186,15 +185,15 @@ def linearOrigin(pep):
 
         raise e
 
-def processLinInitArgs(toWriteQueue, protDict):
+def processLinInitArgs(toWriteQueue, proteinDictList):
     """
     Called from findLinOrigins() when the pool is initialised, this function simply gives linearOrigin() (the worker
     function for each process in the pool) access to the toWriteQueue.
     """
 
     linearOrigin.toWriteQueue = toWriteQueue
-    global proteinDict
-    proteinDict = protDict
+    global protDictList
+    protDictList = proteinDictList
 
 def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
     """
@@ -642,7 +641,7 @@ def processTransInitArgs(toWriteQueue):
     """
     transOrigin.toWriteQueue = toWriteQueue
 
-def writer(toWriteQueue, outputPath, spliceType, protDict, overlapFlag = None):
+def writer(toWriteQueue, outputPath, spliceType, protDictList, overlapFlag = None):
     """
     The writer function for linear spliced origin computation. This function simply pulls origin data to be written
     to file from the toWriteQueue, stores it in the finalLinOriginDict and once all processes are finished, writes
@@ -659,6 +658,10 @@ def writer(toWriteQueue, outputPath, spliceType, protDict, overlapFlag = None):
     """
 
     finalLinOriginDict = {}
+
+    protDict = {}
+    for protDictIter in protDictList:
+        protDict.update(protDictIter)
 
     while True:
         linOriginDict = toWriteQueue.get()
@@ -733,6 +736,7 @@ def linDataRow(origins, pep, protDict):
     """
     # iterate through each tuple (there is a tuple for every protein that was found to produce the peptide)
     dataRows = []
+    print(origins)
     for tuple in origins:
         # initialise the first column of the row to be the name of the protein.
         firstHalf = [tuple[0]]
