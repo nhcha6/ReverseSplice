@@ -380,6 +380,17 @@ def findCisIndexes(cisSplits, protSeq):
     return totalLocations
 
 def editSingleAmino(splitLoc1, splitLoc2, split1):
+    """
+    Called by findCisIndexes() if the user has selected not to consider overlap and split1 is only one amino acid.
+    This function edits splitLoc2 to include only the references which can match with split1 without overlap, and
+    edits splitLoc1 to be equal to split1.
+    :param splitLoc1: the location data of the single amino acid (split1)
+    :param splitLoc2: the location data of the second split which combines with split1 to create a cis spliced peptide.
+    :param split1: the single amino acid split being analysed.
+    :return split1: the single amino acid split being analysed.
+    :return splitLoc2: the location data of the second split edited to only include the references which can match
+    with split1 without overlap.
+    """
     # must then check that if the user has selected not to produce overlapped peptides, that at least one
     # of the aminoacids is found outside the locations in splitLoc1
     toDelete = []
@@ -776,7 +787,8 @@ def cisDataRowNew(origins, pep, protDict):
 
 def overlapCheck(split1, split2):
     """
-    Called by cisDataRowNew() to check if two split locations are overlapping. Returns True if they do overlap.
+    Called by cisDataRowNew() and editSingleAmino() to check if two split locations are overlapping. Returns True if
+    they do overlap.
     :param split1: the first location, of the form [start, end].
     :param split2: the second location, again of the form [start, end]
     :return: True if the splits overlap, False if not.
