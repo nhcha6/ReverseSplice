@@ -724,6 +724,9 @@ def cisDataRowNew(origins, pep, protDict):
             split2List = splitCombo[1]
             for split1 in split1List:
                 for split2 in split2List:
+                    # check for overlap between the splits if user has prescribed no overlap
+                    if overlapCheck(split1, split2):
+                        continue
                     prot = protDict[protName]
                     # check that they combine in the correct order
                     # check for a split of len1
@@ -739,6 +742,21 @@ def cisDataRowNew(origins, pep, protDict):
                     dataRow = firstHalf + secondHalf
                     dataRows.append(dataRow)
     return dataRows
+
+def overlapCheck(split1, split2):
+    """
+    Called by cisDataRowNew() to check if two split locations are overlapping. Returns True if they do overlap.
+    :param split1: the first location, of the form [start, end].
+    :param split2: the second location, again of the form [start, end]
+    :return: True if the splits overlap, False if not.
+    """
+    if len(split1) == 1 or len(split2) == 1:
+        return False
+    split1Set = set(range(split1[0],split1[1]+1))
+    split2Set = set(range(split2[0], split2[1] + 1))
+    if len(split1Set.intersection(split2Set)) == 0:
+        return False
+    return True
 
 def transDataRow(origins, pep, protDict):
     """
