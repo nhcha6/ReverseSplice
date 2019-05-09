@@ -240,6 +240,8 @@ def cisOrigin(pep, protDict):
     :return:
     """
     try:
+
+        linFlag = False
         cisOriginDict = {}
 
         # initialise that key in the dictionary
@@ -254,9 +256,9 @@ def cisOrigin(pep, protDict):
         for protName, protSeq in protDict.items():
             # replace all Is with Js as they are indeciferable on mass spec.
             alteredProt = protSeq.replace('I', 'L')
-            # ignore that protSeq if the linear splice comes from it already.
+            # change the linFlag if the pep exists as a linear peptide somewhere in the input
             if alteredPep in alteredProt:
-                continue
+                linFlag = True
             # find the location data corresponding the current protSeq.
             locations = findCisIndexes(cisSplits, alteredProt)
             # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
@@ -266,7 +268,10 @@ def cisOrigin(pep, protDict):
             # if it is possible to create the peptide using cis splicing from the current protein, add the protName
             # and locations tuple to cisOriginsDict
             cisOriginDict[pep].append((protName, locations))
-        cisOrigin.toWriteQueue.put(cisOriginDict)
+        if linFlag:
+            cisOrigin.toWriteQueue.put({})
+        else:
+            cisOrigin.toWriteQueue.put(cisOriginDict)
         logging.info('Cis Process complete for: ' + str(pep))
 
     except Exception as e:
