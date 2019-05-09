@@ -121,7 +121,7 @@ def findLinOrigins(protDictList, pepFile, outputPath):
         with open(pepFile, "rU") as handle:
             for record in SeqIO.parse(handle, 'fasta'):
                 pep = str(record.seq)
-                logging.info('Process started for: ' + str(pep))
+                #logging.info('Process started for: ' + str(pep))
                 pool.apply_async(linearOrigin, args=(pep,))
         pool.close()
         pool.join()
@@ -225,7 +225,7 @@ def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
         with open(pepFile, "rU") as handle:
             for record in SeqIO.parse(handle, 'fasta'):
                 pep = str(record.seq)
-                logging.info('Cis Process started for: ' + str(pep))
+                #logging.info('Cis Process started for: ' + str(pep))
 
                 pool.apply_async(cisOrigin, args=(pep, protDict, overlapFlag))
             pool.close()
@@ -444,7 +444,7 @@ def findTransOrigins(protDictList, pepFile, outputPath, minTransLen):
         with open(pepFile, "rU") as handle:
             for record in SeqIO.parse(handle, 'fasta'):
                 pep = str(record.seq)
-                logging.info('Process started for: ' + str(pep))
+                #logging.info('Process started for: ' + str(pep))
                 pool.apply_async(transOrigin, args=(pep, protDict, minTransLen))
             pool.close()
             pool.join()
@@ -518,8 +518,20 @@ def transOrigin(pep,protDict, minTransLen):
                 # check for the presence of split1 and split2 in the same protSeq. If both exist, it is a cis or lin
                 # peptide so should be ignored from the trans output.
                 if split1 in alteredProt and split2 in alteredProt:
-                    transOrigin.toWriteQueue.put(transOriginDict)
-                    return
+                    overlapLoc1 = []
+                    for x in re.finditer(split1, alteredProt):
+                        overlapLoc1.append([x.start(), x.end()-1])
+                    overlapLoc2 = []
+                    for x in re.finditer(split2, alteredProt):
+                        overlapLoc2.append([x.start(), x.end() - 1])
+                    for loc1 in overlapLoc1:
+                        for loc2 in overlapLoc2:
+                            if not overlapCheck(loc1, loc2):
+                                print(split1)
+                                print(split2)
+                                transOriginDict[pep] = []
+                                transOrigin.toWriteQueue.put(transOriginDict)
+                                return
 
                 # check for presence of split1 in the current protein
                 # if splitLoc1 == True, we know that this split has been found and we can
