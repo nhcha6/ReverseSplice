@@ -356,6 +356,11 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag):
         for x in re.finditer(split2, protSeq):
             splitLoc2.append([x.start(), x.end() - 1])
 
+        # if either of the splitLocs are empty, the peptide cannot be formed using this split combo from the given
+        # protSeq. Thus continue if either are empty.
+        if splitLoc1 == [] or splitLoc2 == []:
+            continue
+
         # if both splits exist, we check if the length of either of the splits is 1. If so, there are likely to be heaos
         # of locations where this split exists. Thus, if the length is 1 we change the location to be simply the amino
         # acid instead of all the positions it is located at within the peptide.
@@ -363,19 +368,18 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag):
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
             if overlapFlag:
-                splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1)
+                splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1, 12)
             else:
                 splitLoc1 = split1
         if len(split2) == 1:
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
             if overlapFlag:
-                splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2)
+                splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2,12)
             else:
                 splitLoc2 = split2
 
-        # if either of the splitLocs are empty, the peptide cannot be formed using this split combo from the given
-        # protSeq. Thus continue if either are empty.
+        # Check if either split has become empty since running the split = 1 checks.
         if splitLoc1 == [] or splitLoc2 == []:
             continue
 
@@ -387,7 +391,7 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag):
         totalLocations.append(splitLocations)
     return totalLocations
 
-def editSingleAmino(splitLoc1, splitLoc2, split1):
+def editSingleAmino(splitLoc1, splitLoc2, split1, maxDistance):
     """
     Called by findCisIndexes() if the user has selected not to consider overlap and split1 is only one amino acid.
     This function edits splitLoc2 to include only the references which can match with split1 without overlap, and
@@ -404,13 +408,20 @@ def editSingleAmino(splitLoc1, splitLoc2, split1):
     toDelete = []
     i = 0
     for loc2 in splitLoc2:
+        # flag to check if their exists a peptide which satisfies maxDistance and overlap criteria. Set to False if
+        # a satisfactory pair is found.
         onlyOverlap = True
         for loc1 in splitLoc1:
             if not overlapCheck(loc1, loc2):
-                onlyOverlap = False
+                if maxDistance is None:
+                    onlyOverlap = False
+                elif not checkMaxDistance(loc1, loc2, maxDistance):
+                    onlyOverlap = False
+        # if onlyOverlap hasn't been set to False, we want to delete the split at the current index in splitLoc2.
         if onlyOverlap:
             toDelete.append(i)
         i+=1
+    # reverse toDelete, iterate through and remove all splitLocs flagged for deletion.
     toDelete.reverse()
     for j in toDelete:
         del splitLoc2[j]
@@ -527,8 +538,6 @@ def transOrigin(pep,protDict, minTransLen):
                     for loc1 in overlapLoc1:
                         for loc2 in overlapLoc2:
                             if not overlapCheck(loc1, loc2):
-                                print(split1)
-                                print(split2)
                                 transOriginDict[pep] = []
                                 transOrigin.toWriteQueue.put(transOriginDict)
                                 return
@@ -793,6 +802,10 @@ def cisDataRowNew(origins, pep, protDict, overlapFlag):
                     if overlapFlag:
                         if overlapCheck(split1, split2):
                             continue
+                    # if maxDistance is not None, we need to check if the splits meet the criteria.
+                    if True:
+                        if checkMaxDistance(split1, split2, 12):
+                            continue
                     prot = protDict[protName]
                     # check that they combine in the correct order
                     # check for a split of len1
@@ -817,6 +830,8 @@ def overlapCheck(split1, split2):
     :param split2: the second location, again of the form [start, end]
     :return: True if the splits overlap, False if not.
     """
+    # if the function is recieving a single amino instead of the split reference list, return False as no overelap has
+    # already been assured.
     if len(split1) == 1 or len(split2) == 1:
         return False
     split1Set = set(range(split1[0],split1[1]+1))
@@ -824,6 +839,28 @@ def overlapCheck(split1, split2):
     if len(split1Set.intersection(split2Set)) == 0:
         return False
     return True
+
+def checkMaxDistance(split1, split2, maxDistance):
+    """
+    This function takes two split reference lists which refer to cleavages involved in cis splicing and returns if they
+    are within the designated masDistance.
+    :param split1: a split reference list for cis splicing: [start, end]
+    :param split2: a split reference list for cis splicing: [start, end]
+    :param maxDistance: the maximum distance two cleavages can be a part in the original peptide for them to be combined
+    via cis splicing.
+    :return: True if the splits are not within the designated maxDistance.
+    """
+    # if the function is recieving a single amino instead of the split reference list, return False as max distance has
+    # already been assured.
+    if len(split1) == 1 or len(split2) == 1:
+        return False
+    # if either checks pass the splits satisfy max distance.
+    if abs(split1[1] - split2[0]) <= maxDistance:
+        return False
+    if abs(split2[1] - split1[0]) <= maxDistance:
+        return False
+    return True
+
 
 def transDataRow(origins, pep, protDict):
     """
