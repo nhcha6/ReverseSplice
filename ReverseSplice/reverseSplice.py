@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 PROT_THRESH = 2
 STOP = "STOP"
 
-def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransLen):
+def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransLen, maxDistance):
     """
     Called from Example.createOutput() in reverseSpliceGUI.py, this function recieves the input parameters from the
     GUI code, creates the protein dictionary from the input path and then calls generateOrigins to begin the
@@ -36,7 +36,7 @@ def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, trans
     :return:
     """
     protDictList = protFastaToDict(proteinFile)
-    generateOrigins(protDictList, peptideFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen)
+    generateOrigins(protDictList, peptideFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen, maxDistance)
 
 def protFastaToDict(protFile):
     """
@@ -62,7 +62,7 @@ def protFastaToDict(protFile):
             protDictList.append(protDict)
     return protDictList
 
-def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen):
+def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFlag, overlapFlag, minTransLen, maxDistance):
     """
     Called by generateOutput(), this function controls the calling of a separate function for linear, cis and trans
     splicing.
@@ -86,7 +86,7 @@ def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFl
         findLinOrigins(protDictList, pepFile, outputPath)
     if cisFlag:
         # Find cis origins
-        findCisOrigins(protDictList, pepFile, outputPath, overlapFlag)
+        findCisOrigins(protDictList, pepFile, outputPath, overlapFlag, maxDistance)
     if transFlag:
         # Find trans origins > work in progress
         findTransOrigins(protDictList, pepFile, outputPath, minTransLen)
@@ -197,7 +197,7 @@ def processLinInitArgs(toWriteQueue, protDict):
     global proteinDict
     proteinDict = protDict
 
-def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
+def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag, maxDistance):
     """
     Called by generateOrigins(), this function takes the protDict and pepList and creates processes which compute
     where within the protein list each peptide could have been generated from via cis splicing. Each process it
@@ -219,7 +219,7 @@ def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
         toWriteQueue = multiprocessing.Queue()
         pool = multiprocessing.Pool(processes=numWorkers, initializer=processCisInitArgs,
                                     initargs=(toWriteQueue,))
-        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict, overlapFlag))
+        writerProcess = multiprocessing.Process(target=writer, args=(toWriteQueue, outputPath, 'Cis', protDict, (overlapFlag, maxDistance)))
         writerProcess.start()
 
         # iterate through each pep in pepList
@@ -228,14 +228,14 @@ def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag):
                 pep = str(record.seq)
                 #logging.info('Cis Process started for: ' + str(pep))
 
-                pool.apply_async(cisOrigin, args=(pep, protDict, overlapFlag))
+                pool.apply_async(cisOrigin, args=(pep, protDict, overlapFlag, maxDistance))
             pool.close()
             pool.join()
         logging.info("Pool joined")
         toWriteQueue.put(STOP)
         writerProcess.join()
 
-def cisOrigin(pep, protDict, overlapFlag):
+def cisOrigin(pep, protDict, overlapFlag, maxDistance):
     """
     Called as the worker process to the pool in findCisOrigins(), this function takes an individual peptide and a
     dictionary of protein sequences, and returns the proteins and locations within them from which the peptide could be
@@ -269,7 +269,7 @@ def cisOrigin(pep, protDict, overlapFlag):
                 cisOrigin.toWriteQueue.put(cisOriginDict)
                 return
             # find the location data corresponding the current protSeq.
-            locations = findCisIndexes(cisSplits, alteredProt, overlapFlag)
+            locations = findCisIndexes(cisSplits, alteredProt, overlapFlag, maxDistance)
             # if there no pairs of splits are located in protSeq, findCisIndexes() will return an empty list.
             # If so, continue.
             if locations == []:
@@ -323,7 +323,7 @@ def findSplits(pep):
         cisSplits.append((split1,split2))
     return cisSplits
 
-def findCisIndexes(cisSplits, protSeq, overlapFlag):
+def findCisIndexes(cisSplits, protSeq, overlapFlag, maxDistance):
     """
     Called by cisOrigins(), this function returns the location data of where different pairs of cisSplits (which
     combine to form a given peptide) exist in a protein sequence. The output data structure is a series of embedded
@@ -361,23 +361,34 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag):
         if splitLoc1 == [] or splitLoc2 == []:
             continue
 
+
         # if both splits exist, we check if the length of either of the splits is 1. If so, there are likely to be heaos
         # of locations where this split exists. Thus, if the length is 1 we change the location to be simply the amino
         # acid instead of all the positions it is located at within the peptide.
         if len(split1) == 1:
+            print("checking single aminos: ")
+            print(splitLoc1)
+            print(splitLoc2)
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
             if overlapFlag:
-                splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1, 12)
+                splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1, maxDistance)
             else:
                 splitLoc1 = split1
+            print(splitLoc1)
+            print(splitLoc2)
         if len(split2) == 1:
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
+            print("checking single aminos: ")
+            print(splitLoc1)
+            print(splitLoc2)
             if overlapFlag:
-                splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2,12)
+                splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2, maxDistance)
             else:
                 splitLoc2 = split2
+            print(splitLoc1)
+            print(splitLoc2)
 
         # Check if either split has become empty since running the split = 1 checks.
         if splitLoc1 == [] or splitLoc2 == []:
@@ -663,7 +674,7 @@ def processTransInitArgs(toWriteQueue):
     """
     transOrigin.toWriteQueue = toWriteQueue
 
-def writer(toWriteQueue, outputPath, spliceType, protDict, overlapFlag = None):
+def writer(toWriteQueue, outputPath, spliceType, protDict, cisTup = None):
     """
     The writer function for linear spliced origin computation. This function simply pulls origin data to be written
     to file from the toWriteQueue, stores it in the finalLinOriginDict and once all processes are finished, writes
@@ -692,9 +703,15 @@ def writer(toWriteQueue, outputPath, spliceType, protDict, overlapFlag = None):
                 finalLinOriginDict[key].append(linOriginDict[key])
             else:
                 finalLinOriginDict[key] = linOriginDict[key]
-    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict, overlapFlag)
+    if cisTup == None:
+        overlapFlag = None
+        maxDistance = 'None'
+    else:
+        overlapFlag = cisTup[0]
+        maxDistance = cisTup[1]
+    writeToFasta(finalLinOriginDict, outputPath, spliceType, protDict, overlapFlag, maxDistance)
 
-def writeToFasta(originDict, outputPath, spliceType, protDict, overlapFlag):
+def writeToFasta(originDict, outputPath, spliceType, protDict, overlapFlag, maxDistance):
     """
     This function is called by writer(), and takes the ouptut data dictionary and writes it to the filePath given.
     Also takes the spliceType argument to know how to format the csv and name it.
@@ -730,7 +747,7 @@ def writeToFasta(originDict, outputPath, spliceType, protDict, overlapFlag):
                 if spliceType == 'Linear':
                     dataRows = linDataRow(origins, pep, protDict)
                 elif spliceType == 'Cis':
-                    dataRows = cisDataRowNew(origins, pep, protDict, overlapFlag)
+                    dataRows = cisDataRowNew(origins, pep, protDict, overlapFlag, maxDistance)
                 else:
                     dataRows = transDataRow(origins, pep, protDict)
                 # write the formated data to the row.
@@ -770,7 +787,7 @@ def linDataRow(origins, pep, protDict):
     # return dataRows to be written to csv.
     return dataRows
 
-def cisDataRowNew(origins, pep, protDict, overlapFlag):
+def cisDataRowNew(origins, pep, protDict, overlapFlag, maxDistance):
     """
     Called by writeToFasta(), this function takes the cis origin data for a given peptide and formats it for writing
     to the csv file.
@@ -801,10 +818,16 @@ def cisDataRowNew(origins, pep, protDict, overlapFlag):
                     # check for overlap between the splits if user has prescribed no overlap
                     if overlapFlag:
                         if overlapCheck(split1, split2):
+                            print("Failed overlap")
+                            print(split1)
+                            print(split2)
                             continue
                     # if maxDistance is not None, we need to check if the splits meet the criteria.
-                    if True:
-                        if checkMaxDistance(split1, split2, 12):
+                    if not maxDistance == 'None':
+                        if checkMaxDistance(split1, split2, maxDistance):
+                            print("Failed Max Distance")
+                            print(split1)
+                            print(split2)
                             continue
                     prot = protDict[protName]
                     # check that they combine in the correct order

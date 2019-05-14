@@ -81,7 +81,7 @@ class Example(QWidget):
 
         self.generateOutput = QPushButton('Generate Output')
         self.generateOutput.setEnabled(False)
-        self.grid.addWidget(self.generateOutput, 9, 1)
+        self.grid.addWidget(self.generateOutput, 11, 1)
         self.generateOutput.clicked.connect(self.outputCheck)
 
         self.linCheckbox = QCheckBox('Linear')
@@ -90,7 +90,7 @@ class Example(QWidget):
         self.cisCheckbox = QCheckBox('Cis')
         self.cisCheckbox.setEnabled(False)
         self.cisCheckbox.stateChanged.connect(self.enableOutput)
-        self.cisCheckbox.stateChanged.connect(self.enableOverlap)
+        self.cisCheckbox.stateChanged.connect(self.enableCis)
         self.transCheckbox = QCheckBox('Trans')
         self.transCheckbox.setEnabled(False)
         self.transCheckbox.stateChanged.connect(self.enableOutput)
@@ -102,12 +102,22 @@ class Example(QWidget):
             self.minTransLen.addItem(str(i))
         self.minTransLen.setEnabled(False)
         self.minTransLabel.setEnabled(False)
+        self.maxDist = QComboBox()
+        self.maxDistLabel = QLabel("Max Distance Cis Cleavages: ")
+        self.maxDist.addItem('None')
+        for i in range(1,26):
+            self.maxDist.addItem(str(i))
+        self.maxDist.setEnabled(False)
+        self.maxDistLabel.setEnabled(False)
         self.grid.addWidget(self.linCheckbox, 3, 1)
         self.grid.addWidget(self.cisCheckbox, 4, 1)
         self.grid.addWidget(self.transCheckbox, 5, 1)
         self.grid.addWidget(self.overlapCheckbox, 6,1)
-        self.grid.addWidget(self.minTransLen, 8, 1)
-        self.grid.addWidget(self.minTransLabel, 7, 1)
+        self.grid.addWidget(self.maxDistLabel, 7, 1)
+        self.grid.addWidget(self.maxDist, 8, 1)
+        self.grid.addWidget(self.minTransLen, 10, 1)
+        self.grid.addWidget(self.minTransLabel, 9, 1)
+
 
     def uploadFile(self):
         fname = QFileDialog.getOpenFileName(self, 'Open File', '/home/')
@@ -229,11 +239,12 @@ class Example(QWidget):
         outputFile = self.outputPath + '/' + self.fileName.text()
         print(outputFile)
         self.outputGen = OutputGenerator(self.createOutput, outputFile, self.proteinFile, self.peptideFile, self.linFlag,
-                                         self.cisFlag, self.transFlag, self.overlapFlag, int(self.minTransLength))
+                                         self.cisFlag, self.transFlag, self.overlapFlag, int(self.minTransLength),
+                                         int(self.maxDistance))
         self.outputGen.signals.finished.connect(self.outputFinished)
         self.threadpool.start(self.outputGen)
         self.outputLabel = QLabel("Generating Output. Please Wait!")
-        self.grid.addWidget(self.outputLabel, 10, 1)
+        self.grid.addWidget(self.outputLabel, 12, 1)
         # close the output name box.
         self.outputNameBox.close()
 
@@ -248,13 +259,16 @@ class Example(QWidget):
             self.cisFlag = self.cisCheckbox.isChecked()
             self.transFlag = self.transCheckbox.isChecked()
             self.overlapFlag = self.overlapCheckbox.isChecked()
+            self.maxDistance = self.maxDist.currentText()
             self.minTransLength = self.minTransLen.currentText()
+
 
             reply = QMessageBox.question(self, 'Message', 'Are these the correct files you wish to run?' + "\n" +
                                                             "Please ensure you haven't switched the protein and peptide input." + '\n'+ '\n' +
                                                             'Protein File: ' + self.proteinFile + '\n' + '\n' +
                                                             'Peptide File: ' + self.peptideFile + '\n' + '\n' +
                                                             'Min Cleavage Length: ' + self.minTransLength + '\n' +
+                                                            'Max Distance Cis: ' + self.maxDistance + '\n' +
                                                             'Linear: ' + str(self.linFlag) + ', Cis: ' + str(self.cisFlag) + ', Trans: ' + str(self.transFlag) + '\n' +
                                                             'Overlap Off: ' + str(self.overlapFlag))
 
@@ -273,14 +287,19 @@ class Example(QWidget):
         else:
             self.generateOutput.setEnabled(False)
 
-    def enableOverlap(self):
+    def enableCis(self):
         if self.cisCheckbox.isChecked():
             self.overlapCheckbox.setEnabled(True)
+            self.maxDist.setEnabled(True)
+            self.maxDistLabel.setEnabled(True)
         else:
             self.overlapCheckbox.setEnabled(False)
+            self.maxDist.setEnabled(False)
+            self.maxDistLabel.setEnabled(False)
 
-    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransFlag):
-        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransFlag)
+    def createOutput(self, outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTrans,
+                     maxDistance):
+        generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTrans, maxDistance)
 
     def outputFinished(self):
         QMessageBox.about(self, "Message", "All done!")
