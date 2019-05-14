@@ -33,6 +33,8 @@ def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, trans
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :param minTransLen: the minimum length a cleavage must be for it to be reported in the output file as an origin
     for a trans spliced peptide.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
     protDictList = protFastaToDict(proteinFile)
@@ -77,6 +79,8 @@ def generateOrigins(protDictList, pepFile, outputPath, linFlag, cisFlag, transFl
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
     :param minTransLen: the minimum length a cleavage must be for it to be reported in the output file as an origin
     for a trans spliced peptide.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
 
     The purpose of this function is to find the aforementioned origins based on the flags passed through and then write
     the output to a Fasta file
@@ -211,6 +215,8 @@ def findCisOrigins(protDictList, pepFile, outputPath, overlapFlag, maxDistance):
     :param pepFile: A file containing a list of peptides that you want to find the linear origin locations for.
     :param outputPath: the location and name of the output file as selected by the user.
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
     outputPath = outputPath + '_' + 'Cis' + '-' + datetime.now().strftime("%d%m%y_%H%M") + '.csv'
@@ -245,6 +251,8 @@ def cisOrigin(pep, protDict, overlapFlag, maxDistance):
     :param pep: the peptide which the user wishes to find potential linear splicing origins of.
     :param protDict: a dictionary containing all the input protein sequences.
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
     try:
@@ -338,6 +346,8 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag, maxDistance):
     :param protSeq: the proteins sequence within which these pairs are being searched for. If both pairs are found,
     the location data of where they were found within the protein is added to the data structure described above.
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
     totalLocations = []
@@ -410,6 +420,8 @@ def editSingleAmino(splitLoc1, splitLoc2, split1, maxDistance):
     :param splitLoc1: the location data of the single amino acid (split1)
     :param splitLoc2: the location data of the second split which combines with split1 to create a cis spliced peptide.
     :param split1: the single amino acid split being analysed.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return split1: the single amino acid split being analysed.
     :return splitLoc2: the location data of the second split edited to only include the references which can match
     with split1 without overlap.
@@ -686,7 +698,9 @@ def writer(toWriteQueue, outputPath, spliceType, protDict, cisTup = None):
     :param outputPath: the path of the linear output csv file.
     :param spliceType: the type of splicing being run in the current iteration.
     :param protDict: the dictionary containing all the input proteins, which is required when writing to file.
-    :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param cisTup: a tuple containing overlapFlag at index 0 and maxDistance at index 1. overlapFlag is True if the
+    user has selected no overlap when running cis splicing. maxDistance is the maximum distance two cleavages can be
+    away from each other for them to combined in cis splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
 
@@ -724,6 +738,8 @@ def writeToFasta(originDict, outputPath, spliceType, protDict, overlapFlag, maxD
     :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
     peptide and origin due to the program not treating I/J differently.
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return:
     """
     with open(outputPath, 'a', newline='') as csv_file:
@@ -799,6 +815,8 @@ def cisDataRowNew(origins, pep, protDict, overlapFlag, maxDistance):
     :param protDict: a dictionary containing the input protein data. This is needed to return slight differences in the
     peptide and origin due to the program not treating I/J differently.
     :param overlapFlag: True if the user has selected no overlap when running cis splicing.
+    :param maxDistance: the maximum distance two cleavages can be away from each other for them to combined in cis
+    splicing. Will be 'None' if the user wants no maximum.
     :return dataRows: a list of lists, where each sublist is a row of data which is to be written to file. Each sublist
     has the format: [protName, peptide, pepInProt, location]
     """
