@@ -12,7 +12,7 @@ import traceback
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-PROT_THRESH = 2
+PROT_THRESH = 5000000
 STOP = "STOP"
 
 def generateOutput(outputPath, proteinFile, peptideFile, linFlag, cisFlag, transFlag, overlapFlag, minTransLen, maxDistance):
