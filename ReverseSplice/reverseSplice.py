@@ -436,7 +436,7 @@ def editSingleAmino(splitLoc1, splitLoc2, split1, maxDistance):
         onlyOverlap = True
         for loc1 in splitLoc1:
             if not overlapCheck(loc1, loc2):
-                if maxDistance is None:
+                if maxDistance == 'None':
                     onlyOverlap = False
                 elif not checkMaxDistance(loc1, loc2, maxDistance):
                     onlyOverlap = False
@@ -891,6 +891,7 @@ def checkMaxDistance(split1, split2, maxDistance):
     via cis splicing.
     :return: True if the splits are not within the designated maxDistance.
     """
+    print(maxDistance)
     # if the function is recieving a single amino instead of the split reference list, return False as max distance has
     # already been assured.
     if len(split1) == 1 or len(split2) == 1:

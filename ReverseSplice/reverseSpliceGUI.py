@@ -281,7 +281,7 @@ class Example(QWidget):
         print(outputFile)
         self.outputGen = OutputGenerator(self.createOutput, outputFile, self.proteinFile, self.peptideFile, self.linFlag,
                                          self.cisFlag, self.transFlag, self.overlapFlag, int(self.minTransLength),
-                                         int(self.maxDistance))
+                                         self.maxDistance)
         self.outputGen.signals.finished.connect(self.outputFinished)
         self.threadpool.start(self.outputGen)
         self.outputLabel = QLabel("Generating Output. Please Wait!")
@@ -318,6 +318,9 @@ class Example(QWidget):
                                                             'Max Distance Cis: ' + self.maxDistance + '\n' +
                                                             'Linear: ' + str(self.linFlag) + ', Cis: ' + str(self.cisFlag) + ', Trans: ' + str(self.transFlag) + '\n' +
                                                             'Overlap Off: ' + str(self.overlapFlag))
+
+            if not self.maxDistance == 'None':
+                self.maxDistance = int(self.maxDistance)
 
             if reply == QMessageBox.Yes:
                 self.getOutputPath()
