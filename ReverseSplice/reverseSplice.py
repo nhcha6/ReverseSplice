@@ -147,7 +147,7 @@ def linearOrigin(pep):
     """
     try:
 
-        print(pep)
+        #print(pep)
         linOriginDict = {}
         # initialise the key as an empty list in the outputDict
         linOriginDict[pep] = []
@@ -376,29 +376,29 @@ def findCisIndexes(cisSplits, protSeq, overlapFlag, maxDistance):
         # of locations where this split exists. Thus, if the length is 1 we change the location to be simply the amino
         # acid instead of all the positions it is located at within the peptide.
         if len(split1) == 1:
-            print("checking single aminos: ")
-            print(splitLoc1)
-            print(splitLoc2)
+            #print("checking single aminos: ")
+            #print(splitLoc1)
+            #print(splitLoc2)
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
             if overlapFlag:
                 splitLoc1, splitLoc2 = editSingleAmino(splitLoc1, splitLoc2, split1, maxDistance)
             else:
                 splitLoc1 = split1
-            print(splitLoc1)
-            print(splitLoc2)
+            #print(splitLoc1)
+            #print(splitLoc2)
         if len(split2) == 1:
             # if the user has selected not to run overlap, we need call editSingleAmino to ensure that overlap is
             # satisfied when converting split1 to just hold the amino acid.
-            print("checking single aminos: ")
-            print(splitLoc1)
-            print(splitLoc2)
+            #print("checking single aminos: ")
+            #print(splitLoc1)
+            #print(splitLoc2)
             if overlapFlag:
                 splitLoc2, splitLoc1 = editSingleAmino(splitLoc2, splitLoc1, split2, maxDistance)
             else:
                 splitLoc2 = split2
-            print(splitLoc1)
-            print(splitLoc2)
+            #print(splitLoc1)
+            #print(splitLoc2)
 
         # Check if either split has become empty since running the split = 1 checks.
         if splitLoc1 == [] or splitLoc2 == []:
@@ -836,16 +836,16 @@ def cisDataRowNew(origins, pep, protDict, overlapFlag, maxDistance):
                     # check for overlap between the splits if user has prescribed no overlap
                     if overlapFlag:
                         if overlapCheck(split1, split2):
-                            print("Failed overlap")
-                            print(split1)
-                            print(split2)
+                            #print("Failed overlap")
+                            #print(split1)
+                            #print(split2)
                             continue
                     # if maxDistance is not None, we need to check if the splits meet the criteria.
                     if not maxDistance == 'None':
                         if checkMaxDistance(split1, split2, maxDistance):
-                            print("Failed Max Distance")
-                            print(split1)
-                            print(split2)
+                            #print("Failed Max Distance")
+                            #print(split1)
+                            #print(split2)
                             continue
                     prot = protDict[protName]
                     # check that they combine in the correct order
@@ -891,7 +891,7 @@ def checkMaxDistance(split1, split2, maxDistance):
     via cis splicing.
     :return: True if the splits are not within the designated maxDistance.
     """
-    print(maxDistance)
+    #print(maxDistance)
     # if the function is recieving a single amino instead of the split reference list, return False as max distance has
     # already been assured.
     if len(split1) == 1 or len(split2) == 1:
